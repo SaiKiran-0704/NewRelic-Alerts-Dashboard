@@ -274,9 +274,8 @@ else:
             tooltip=['Customer', 'count()']
         )
         
-        # Configure Selection
-        # This highlights the bar on hover and allows clicking
-        click_selection = alt.selection_point(encodings=['x'])
+        # Configure Selection - NAMED "select_customer" FOR SAFETY
+        click_selection = alt.selection_point(name="select_customer", encodings=['x'])
         
         chart = base.mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3, cursor='pointer').encode(
             color=alt.condition(click_selection, alt.value('#FF9F1C'), alt.value('#333333')),
@@ -284,59 +283,21 @@ else:
         ).add_params(click_selection).properties(height=320)
 
         # RENDER CHART & CAPTURE SELECTION
-        # on_select="rerun" makes the app reload when you click a bar
         event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
 
-        # CHECK SELECTION
-        if len(event.selection.point_selection) > 0:
-            # Altair returns a list of dictionaries, we extract the Customer name
-            clicked_row = event.selection.point_selection[0]
-            # Depending on Altair version, it might be index or value. 
-            # We filter based on the 'Customer' field which maps to the x-axis
-            # Since we can't easily get the value directly from index without source mapping, 
-            # we rely on the fact that the user clicked something.
-            # *Simpler approach for Streamlit*: We need to map the selected index back to data.
-            # However, simpler is usually better:
-            
-            # Using the native "Select" feature often returns indices. 
-            # Let's try to filter the df_main if a selection is made.
-            
-            # Actually, standard Altair selection return in Streamlit < 1.35 is tricky.
-            # Assuming you are on latest Streamlit, `event.selection` contains the data.
-             
-            # Let's grab the clicked customer name safely
-            try:
-                # This finds the customer name that corresponds to the selection
-                # Note: This specific logic depends on Streamlit returning the data point.
-                # If this is complex, we display a filtered view.
-                pass 
-            except:
-                pass
-
-            # Since getting the exact string back can be version-dependent, 
-            # we will check if the event dictionary has the row data.
-            # For now, let's assume the user wants to see the visual feedback.
-            
-            # Actually, let's use the Selection to filter the dataframe for the next sections.
-            # We iterate through the selection to find the customer name.
-            # The event object looks like: {'selection': {'point_selection': [{'Customer': 'Name'}]}}
-            
-            if 'Customer' in event.selection.point_selection[0]:
-                clicked_customer = event.selection.point_selection[0]['Customer']
+        # CHECK SELECTION SAFELY (Dict Access)
+        if event.selection and "select_customer" in event.selection:
+            selection_data = event.selection["select_customer"]
+            if len(selection_data) > 0 and "Customer" in selection_data[0]:
+                clicked_customer = selection_data[0]["Customer"]
                 st.info(f"📍 Filtering results for: **{clicked_customer}**")
-                
-                # Add a Reset Button
                 if st.button("🔄 Reset to All Customers"):
-                    clicked_customer = None # Reset will happen on rerun naturally
-            
-    
+                    clicked_customer = None
+
     # --- FILTER DATA FOR DISPLAY BELOW ---
-    # If a customer was clicked on the chart, filter df_display. 
-    # If not, keep showing everything.
     df_drilldown = df_main
     if clicked_customer:
         df_drilldown = df_main[df_main['Customer'] == clicked_customer]
-
 
     # --- ALERTS SECTION ---
     st.divider()
