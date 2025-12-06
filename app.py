@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import datetime
+import altair as alt
 from PIL import Image
 
 # --- PAGE SETUP ---
@@ -79,7 +80,6 @@ except FileNotFoundError:
 ENDPOINT = "https://api.newrelic.com/graphql"
 
 # --- 2. SESSION STATE INITIALIZATION ---
-# This ensures data stays on screen until you click Apply again
 if 'alert_data' not in st.session_state:
     st.session_state['alert_data'] = None
 if 'last_updated' not in st.session_state:
@@ -89,7 +89,6 @@ if 'last_updated' not in st.session_state:
 with st.sidebar:
     st.header("🎛️ Controls")
     
-    # WRAP EVERYTHING IN A FORM so it only runs when you click submit
     with st.form("filter_form"):
         # Customer Selector
         customer_keys = list(CLIENTS.keys())
@@ -121,7 +120,6 @@ with st.sidebar:
         time_options = list(time_ranges.keys()) + ["Custom Date Range"]
         selected_time_label = st.selectbox("Time Frame", time_options, label_visibility="collapsed")
 
-        # Logic for Custom Date inside the form
         if selected_time_label == "Custom Date Range":
             col_d1, col_d2 = st.columns(2)
             start_date = col_d1.date_input("Start", datetime.date.today() - datetime.timedelta(days=1))
@@ -131,7 +129,6 @@ with st.sidebar:
             time_clause = time_ranges[selected_time_label]
             
         st.divider()
-        # This is the ONLY button that triggers a data refresh
         submitted = st.form_submit_button("Apply Filters", type="primary", use_container_width=True)
 
     if st.session_state['last_updated']:
@@ -187,7 +184,7 @@ def fetch_single_account(client_name, api_key, account_id, time_filter):
         pass
     return pd.DataFrame()
 
-# --- 5. DATA FETCHING LOGIC (Runs only when Submitted) ---
+# --- 5. MAIN APP LOGIC ---
 if submitted:
     if not CLIENTS:
         st.warning("⚠️ Configuration Needed: Please add API keys to secrets.toml")
@@ -205,7 +202,6 @@ if submitted:
                 raw_df['timestamp'] = pd.to_datetime(raw_df['timestamp'], unit='ms')
                 if 'Entity' not in raw_df.columns: raw_df['Entity'] = 'N/A'
 
-                # Aggregation
                 grouped = raw_df.groupby(['incidentId', 'Customer', 'policyName', 'conditionName', 'priority', 'Entity']).agg(
                     start_time=('timestamp', 'min'),
                     end_time=('timestamp', 'max'),
@@ -217,7 +213,6 @@ if submitted:
                 grouped['Duration'] = grouped.apply(lambda x: format_duration((now - x['start_time']) if x['Status'] == 'Active' else (x['end_time'] - x['start_time'])), axis=1)
                 grouped['Category'] = grouped.apply(categorize_alert, axis=1)
                 
-                # Filter by Status (Done here so we store the filtered result)
                 if status_filter == "Active":
                     final_df = grouped[grouped['Status'] == 'Active']
                 elif status_filter == "Closed":
@@ -225,15 +220,13 @@ if submitted:
                 else:
                     final_df = grouped
                 
-                # SAVE TO SESSION STATE
                 st.session_state['alert_data'] = final_df.sort_values(by='start_time', ascending=False)
                 st.session_state['last_updated'] = datetime.datetime.now().strftime('%H:%M:%S')
+                st.session_state['current_view_selection'] = selected_view # Store selection to check later
             else:
-                st.session_state['alert_data'] = pd.DataFrame() # Empty if no data
+                st.session_state['alert_data'] = pd.DataFrame()
 
-# --- 6. DISPLAY LOGIC (Reads from Session State) ---
-
-# Header Section
+# --- 6. DISPLAY RENDER ---
 try:
     c1, c2, c3 = st.columns([1, 2, 1]) 
     with c2:
@@ -244,7 +237,6 @@ except Exception:
 st.markdown("<h3 style='text-align: center; margin-top: -10px; opacity: 0.8;'>Stability & Incident Overview</h3>", unsafe_allow_html=True)
 st.divider()
 
-# Main Dashboard Render
 if st.session_state['alert_data'] is None:
     st.info("👈 Please select your options in the sidebar and click **Apply Filters** to start.")
 elif st.session_state['alert_data'].empty:
@@ -254,7 +246,6 @@ else:
 
     # KPI CARDS
     m1, m2, m3, m4 = st.columns(4)
-    
     total_incidents = len(df_display)
     active_now = len(df_display[df_display['Status'] == 'Active'])
     infra_count = len(df_display[df_display['Category'] == 'Infra'])
@@ -267,10 +258,24 @@ else:
 
     st.markdown("###")
 
-    # VOLUME BY CUSTOMER
+    # --- CUSTOMER VOLUME SECTION ---
     if not df_display.empty:
         with st.container():
             st.subheader("📊 Customer Volume")
+            
+            # --- NEW: GRAPH FOR "ALL CUSTOMERS" ONLY ---
+            # Checks if the user selected "All Customers" in the sidebar
+            if st.session_state.get('current_view_selection') == "All Customers":
+                chart = alt.Chart(df_display).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+                    x=alt.X('Customer', sort='-y', title=None, axis=alt.Axis(labelAngle=-45, labelColor='white')),
+                    y=alt.Y('count()', title='Incident Count', axis=alt.Axis(labelColor='white', titleColor='white')),
+                    color=alt.value('#FF9F1C'),
+                    tooltip=['Customer', 'count()']
+                ).properties(height=320).configure_view(strokeWidth=0)
+                
+                st.altair_chart(chart, use_container_width=True)
+            
+            # STANDARD TABLE (Always Visible)
             cust_counts = df_display['Customer'].value_counts().reset_index()
             cust_counts.columns = ['Customer', 'Total Alerts']
             
@@ -291,10 +296,8 @@ else:
 
     # BY ALERTS SECTION
     st.subheader("🔎 Alert Breakdown")
-    
     top_alerts = df_display['conditionName'].value_counts()
     
-    # Summary Table
     summary_df = top_alerts.reset_index()
     summary_df.columns = ['Alert Condition', 'Frequency']
     
@@ -313,16 +316,13 @@ else:
         }
     )
 
-    # Drill Down Expanders
     st.caption("👇 Click to expand specific alerts and see affected entities")
     for i, (alert_name, total_count) in enumerate(top_alerts.items()):
         icon = "🔥" if i < 2 else "⚠️"
-        
         with st.expander(f"{icon} **{alert_name}** — ({total_count} incidents)"):
             subset = df_display[df_display['conditionName'] == alert_name]
             entity_counts = subset['Entity'].value_counts().reset_index()
             entity_counts.columns = ['Entity Name', 'Count']
-            
             st.dataframe(
                 entity_counts, 
                 use_container_width=True, 
@@ -335,9 +335,8 @@ else:
 
     st.divider()
 
-    # DETAILED LOGS TABLE
+    # DETAILED LOGS
     st.subheader("📝 Live Incident Logs")
-    
     common_config = {
         "start_time": st.column_config.DatetimeColumn("Time (UTC)", format="D MMM, HH:mm"),
         "Entity": st.column_config.TextColumn("Entity", width="medium"),
@@ -352,23 +351,13 @@ else:
     with tab1:
         infra_df = df_display[df_display['Category'] == 'Infra']
         if not infra_df.empty:
-            st.dataframe(
-                infra_df[cols].style.map(style_status_column, subset=['Status']), 
-                use_container_width=True, 
-                hide_index=True, 
-                column_config=common_config
-            )
+            st.dataframe(infra_df[cols].style.map(style_status_column, subset=['Status']), use_container_width=True, hide_index=True, column_config=common_config)
         else:
             st.info("No Infrastructure incidents recorded.")
 
     with tab2:
         soc_df = df_display[df_display['Category'] == 'SOC']
         if not soc_df.empty:
-            st.dataframe(
-                soc_df[cols].style.map(style_status_column, subset=['Status']), 
-                use_container_width=True, 
-                hide_index=True, 
-                column_config=common_config
-            )
+            st.dataframe(soc_df[cols].style.map(style_status_column, subset=['Status']), use_container_width=True, hide_index=True, column_config=common_config)
         else:
             st.info("No SOC incidents recorded.")
