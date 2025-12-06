@@ -228,15 +228,16 @@ if submitted:
 
 # --- 6. DISPLAY RENDER ---
 
-# HEADER
+# --- HEADER SECTION (MASSIVE TITLE) ---
 try:
     c1, c2, c3 = st.columns([1, 2, 1]) 
     with c2:
         st.image("logo.png", use_container_width=True) 
 except Exception:
-    st.markdown("<h1 style='text-align: center; color: #FF9F1C; font-size: 64px; margin-bottom: 0px;'>🔥 Quickplay</h1>", unsafe_allow_html=True)
+    # Font size bumped to 100px for "Quickplay"
+    st.markdown("<h1 style='text-align: center; color: #FF9F1C; font-size: 100px; margin-bottom: 0px;'>🔥 Quickplay</h1>", unsafe_allow_html=True)
 
-st.markdown("<h2 style='text-align: center; margin-top: -15px; opacity: 0.8; font-size: 32px;'>Alerts Overview</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; margin-top: -10px; opacity: 0.8; font-size: 32px;'>Alerts Overview</h2>", unsafe_allow_html=True)
 st.divider()
 
 if st.session_state['alert_data'] is None:
@@ -354,7 +355,8 @@ else:
     }
     cols = ['start_time', 'Customer', 'Entity', 'conditionName', 'priority', 'Status', 'Duration']
 
-    tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **Security (SOC)**"])
+    # CHANGED: "Security (SOC)" -> "SOC"
+    tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **SOC**"])
     
     with tab1:
         infra_df = df_drilldown[df_drilldown['Category'] == 'Infra']
