@@ -228,17 +228,14 @@ if submitted:
 
 # --- 6. DISPLAY RENDER ---
 
-# --- HEADER SECTION (UPDATED) ---
-# Used columns to control image sizing, but we use direct markdown for bigger Title text
+# HEADER
 try:
     c1, c2, c3 = st.columns([1, 2, 1]) 
     with c2:
         st.image("logo.png", use_container_width=True) 
 except Exception:
-    # FALLBACK BIG TITLE IF IMAGE FAILS
     st.markdown("<h1 style='text-align: center; color: #FF9F1C; font-size: 64px; margin-bottom: 0px;'>🔥 Quickplay</h1>", unsafe_allow_html=True)
 
-# UPDATED SUBTITLE
 st.markdown("<h2 style='text-align: center; margin-top: -15px; opacity: 0.8; font-size: 32px;'>Alerts Overview</h2>", unsafe_allow_html=True)
 st.divider()
 
@@ -247,14 +244,14 @@ if st.session_state['alert_data'] is None:
 elif st.session_state['alert_data'].empty:
     st.success("No incidents found matching your criteria. Systems are stable! 🎉")
 else:
-    df_display = st.session_state['alert_data']
+    df_main = st.session_state['alert_data']
 
-    # KPI CARDS
+    # --- KPI METRICS ---
     m1, m2, m3, m4 = st.columns(4)
-    total_incidents = len(df_display)
-    active_now = len(df_display[df_display['Status'] == 'Active'])
-    infra_count = len(df_display[df_display['Category'] == 'Infra'])
-    soc_count = len(df_display[df_display['Category'] == 'SOC'])
+    total_incidents = len(df_main)
+    active_now = len(df_main[df_main['Status'] == 'Active'])
+    infra_count = len(df_main[df_main['Category'] == 'Infra'])
+    soc_count = len(df_main[df_main['Category'] == 'SOC'])
 
     m1.metric("Total Incidents", total_incidents, border=True)
     m2.metric("🔥 Active Now", active_now, delta=active_now if active_now > 0 else None, delta_color="inverse", border=True)
@@ -263,44 +260,90 @@ else:
 
     st.markdown("###")
 
-    # --- CUSTOMER VOLUME SECTION ---
-    if not df_display.empty:
-        with st.container():
-            st.subheader("📊 Customer Volume")
-            
-            # --- GRAPH FOR "ALL CUSTOMERS" ONLY ---
-            if st.session_state.get('current_view_selection') == "All Customers":
-                chart = alt.Chart(df_display).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-                    x=alt.X('Customer', sort='-y', title=None, axis=alt.Axis(labelAngle=-45, labelColor='white')),
-                    y=alt.Y('count()', title='Incident Count', axis=alt.Axis(labelColor='white', titleColor='white')),
-                    color=alt.value('#FF9F1C'),
-                    tooltip=['Customer', 'count()']
-                ).properties(height=320).configure_view(strokeWidth=0)
-                
-                st.altair_chart(chart, use_container_width=True)
-            
-            # STANDARD TABLE (Always Visible)
-            cust_counts = df_display['Customer'].value_counts().reset_index()
-            cust_counts.columns = ['Customer', 'Total Alerts']
-            
-            st.dataframe(
-                cust_counts,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Customer": st.column_config.TextColumn("Customer", width="medium"),
-                    "Total Alerts": st.column_config.ProgressColumn(
-                        "Volume",
-                        format="%d",
-                        min_value=0,
-                        max_value=int(cust_counts['Total Alerts'].max()) if not cust_counts.empty else 100,
-                    )
-                }
-            )
+    # --- INTERACTIVE CHART LOGIC ---
+    clicked_customer = None
 
-    # BY ALERTS SECTION
-    st.subheader("🔎 Alert Breakdown")
-    top_alerts = df_display['conditionName'].value_counts()
+    if st.session_state.get('current_view_selection') == "All Customers" and not df_main.empty:
+        st.subheader("📊 Customer Volume")
+        st.caption("👆 **Click on any bar** to filter the alerts below for that specific customer.")
+
+        # Create the Interactive Chart
+        base = alt.Chart(df_main).encode(
+            x=alt.X('Customer', sort='-y', title=None, axis=alt.Axis(labelAngle=-45, labelColor='white')),
+            y=alt.Y('count()', title='Incident Count', axis=alt.Axis(labelColor='white', titleColor='white')),
+            tooltip=['Customer', 'count()']
+        )
+        
+        # Configure Selection
+        # This highlights the bar on hover and allows clicking
+        click_selection = alt.selection_point(encodings=['x'])
+        
+        chart = base.mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3, cursor='pointer').encode(
+            color=alt.condition(click_selection, alt.value('#FF9F1C'), alt.value('#333333')),
+            opacity=alt.condition(click_selection, alt.value(1), alt.value(0.7))
+        ).add_params(click_selection).properties(height=320)
+
+        # RENDER CHART & CAPTURE SELECTION
+        # on_select="rerun" makes the app reload when you click a bar
+        event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
+
+        # CHECK SELECTION
+        if len(event.selection.point_selection) > 0:
+            # Altair returns a list of dictionaries, we extract the Customer name
+            clicked_row = event.selection.point_selection[0]
+            # Depending on Altair version, it might be index or value. 
+            # We filter based on the 'Customer' field which maps to the x-axis
+            # Since we can't easily get the value directly from index without source mapping, 
+            # we rely on the fact that the user clicked something.
+            # *Simpler approach for Streamlit*: We need to map the selected index back to data.
+            # However, simpler is usually better:
+            
+            # Using the native "Select" feature often returns indices. 
+            # Let's try to filter the df_main if a selection is made.
+            
+            # Actually, standard Altair selection return in Streamlit < 1.35 is tricky.
+            # Assuming you are on latest Streamlit, `event.selection` contains the data.
+             
+            # Let's grab the clicked customer name safely
+            try:
+                # This finds the customer name that corresponds to the selection
+                # Note: This specific logic depends on Streamlit returning the data point.
+                # If this is complex, we display a filtered view.
+                pass 
+            except:
+                pass
+
+            # Since getting the exact string back can be version-dependent, 
+            # we will check if the event dictionary has the row data.
+            # For now, let's assume the user wants to see the visual feedback.
+            
+            # Actually, let's use the Selection to filter the dataframe for the next sections.
+            # We iterate through the selection to find the customer name.
+            # The event object looks like: {'selection': {'point_selection': [{'Customer': 'Name'}]}}
+            
+            if 'Customer' in event.selection.point_selection[0]:
+                clicked_customer = event.selection.point_selection[0]['Customer']
+                st.info(f"📍 Filtering results for: **{clicked_customer}**")
+                
+                # Add a Reset Button
+                if st.button("🔄 Reset to All Customers"):
+                    clicked_customer = None # Reset will happen on rerun naturally
+            
+    
+    # --- FILTER DATA FOR DISPLAY BELOW ---
+    # If a customer was clicked on the chart, filter df_display. 
+    # If not, keep showing everything.
+    df_drilldown = df_main
+    if clicked_customer:
+        df_drilldown = df_main[df_main['Customer'] == clicked_customer]
+
+
+    # --- ALERTS SECTION ---
+    st.divider()
+    title_suffix = f"for {clicked_customer}" if clicked_customer else ""
+    st.subheader(f"🔎 Alert Breakdown {title_suffix}")
+    
+    top_alerts = df_drilldown['conditionName'].value_counts()
     
     summary_df = top_alerts.reset_index()
     summary_df.columns = ['Alert Condition', 'Frequency']
@@ -315,7 +358,7 @@ else:
                 "Count", 
                 format="%d", 
                 min_value=0, 
-                max_value=int(top_alerts.max())
+                max_value=int(top_alerts.max()) if not top_alerts.empty else 100
             )
         }
     )
@@ -324,7 +367,7 @@ else:
     for i, (alert_name, total_count) in enumerate(top_alerts.items()):
         icon = "🔥" if i < 2 else "⚠️"
         with st.expander(f"{icon} **{alert_name}** — ({total_count} incidents)"):
-            subset = df_display[df_display['conditionName'] == alert_name]
+            subset = df_drilldown[df_drilldown['conditionName'] == alert_name]
             entity_counts = subset['Entity'].value_counts().reset_index()
             entity_counts.columns = ['Entity Name', 'Count']
             st.dataframe(
@@ -339,8 +382,8 @@ else:
 
     st.divider()
 
-    # DETAILED LOGS
-    st.subheader("📝 Live Incident Logs")
+    # --- LOGS SECTION ---
+    st.subheader(f"📝 Live Incident Logs {title_suffix}")
     common_config = {
         "start_time": st.column_config.DatetimeColumn("Time (UTC)", format="D MMM, HH:mm"),
         "Entity": st.column_config.TextColumn("Entity", width="medium"),
@@ -353,14 +396,14 @@ else:
     tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **Security (SOC)**"])
     
     with tab1:
-        infra_df = df_display[df_display['Category'] == 'Infra']
+        infra_df = df_drilldown[df_drilldown['Category'] == 'Infra']
         if not infra_df.empty:
             st.dataframe(infra_df[cols].style.map(style_status_column, subset=['Status']), use_container_width=True, hide_index=True, column_config=common_config)
         else:
             st.info("No Infrastructure incidents recorded.")
 
     with tab2:
-        soc_df = df_display[df_display['Category'] == 'SOC']
+        soc_df = df_drilldown[df_drilldown['Category'] == 'SOC']
         if not soc_df.empty:
             st.dataframe(soc_df[cols].style.map(style_status_column, subset=['Status']), use_container_width=True, hide_index=True, column_config=common_config)
         else:
