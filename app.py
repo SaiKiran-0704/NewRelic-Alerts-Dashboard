@@ -21,6 +21,7 @@ CLIENTS = {
 except FileNotFoundError:
     st.error("Secrets not configured!")
     CLIENTS = {}
+    }
 
 ENDPOINT = "https://api.newrelic.com/graphql"
 
