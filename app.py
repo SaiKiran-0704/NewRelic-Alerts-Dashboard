@@ -3,20 +3,66 @@ import requests
 import pandas as pd
 import datetime
 import altair as alt
+from PIL import Image
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Alerts Summary", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="Quickplay Stability", layout="wide", page_icon="🔥")
 
-# --- CUSTOM CSS ---
+# --- CUSTOM CSS (ORANGE & BLACK THEME) ---
 st.markdown("""
 <style>
-    .main > div { padding-top: 2rem; }
-    /* Make metrics look cleaner */
+    /* 1. Main Background - Black/Dark Grey */
+    .stApp {
+        background-color: #0e1117;
+        color: #ffffff;
+    }
+    
+    /* 2. Sidebar Background - Slightly lighter black */
+    section[data-testid="stSidebar"] {
+        background-color: #161b22;
+    }
+    
+    /* 3. Metrics Cards - Dark card with Orange Border */
     div[data-testid="stMetric"] {
-        background-color: #f9f9f9;
-        border: 1px solid #e6e6e6;
-        padding: 10px;
+        background-color: #161b22;
+        border: 1px solid #333;
+        border-left: 5px solid #FF9F1C; /* Orange Accent */
+        padding: 15px;
         border-radius: 5px;
+    }
+    
+    /* 4. Progress Bars - Orange */
+    .stProgress > div > div > div > div {
+        background-color: #FF9F1C;
+    }
+    
+    /* 5. Headers & Text */
+    h1, h2, h3, h4, h5, h6, p, span {
+        color: #ffffff !important;
+        font-family: 'Helvetica Neue', sans-serif;
+    }
+    
+    /* 6. Buttons - Orange */
+    div.stButton > button {
+        background-color: #FF9F1C;
+        color: white;
+        border: none;
+    }
+    div.stButton > button:hover {
+        background-color: #e58e19; /* Darker Orange on Hover */
+        color: white;
+    }
+    
+    /* 7. Radio Buttons (Status Filter) */
+    div[role="radiogroup"] label {
+        color: white !important;
+    }
+    
+    /* Center the Logo */
+    .logo-container {
+        display: flex;
+        justify_content: center;
+        margin-bottom: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -25,23 +71,24 @@ st.markdown("""
 try:
     CLIENTS = st.secrets["clients"]
 except FileNotFoundError:
-    st.error("Secrets not configured! Please configure .streamlit/secrets.toml locally or Secrets on Streamlit Cloud.")
+    st.error("Secrets not configured! Please configure .streamlit/secrets.toml locally.")
     CLIENTS = {}
 
 ENDPOINT = "https://api.newrelic.com/graphql"
 
 # --- 2. SIDEBAR ---
 with st.sidebar:
-    st.header("🎛️ Dashboard Controls")
+    st.header("🎛️ Controls")
     customer_keys = list(CLIENTS.keys())
     customer_options = ["All Customers"] + customer_keys if customer_keys else ["No Clients Configured"]
     
     selected_view = st.selectbox("Select Customer", customer_options)
 
-    # --- STATUS FILTER (NEW) ---
-    status_filter = st.radio("Status", ["All", "Active", "Closed"], horizontal=True)
+    # --- STATUS FILTER ---
+    st.markdown("**Status**")
+    status_filter = st.radio("Status Filter", ["All", "Active", "Closed"], horizontal=True, label_visibility="collapsed")
 
-    # --- TIME FRAME (UPDATED) ---
+    # --- TIME FRAME ---
     time_ranges = {
         "Last 60 Minutes": "SINCE 60 minutes ago",
         "Last 24 Hours": "SINCE 24 hours ago",
@@ -49,26 +96,20 @@ with st.sidebar:
         "Last 7 Days": "SINCE 7 days ago",
         "Last 30 Days": "SINCE 30 days ago"
     }
-    # Add "Custom Date Range" to the options
     time_options = list(time_ranges.keys()) + ["Custom Date Range"]
     selected_time_label = st.selectbox("Time Frame", time_options)
 
-    # Logic for Custom Date vs Presets
     if selected_time_label == "Custom Date Range":
         st.markdown("### Select Dates")
         col_d1, col_d2 = st.columns(2)
         start_date = col_d1.date_input("Start", datetime.date.today() - datetime.timedelta(days=1))
         end_date = col_d2.date_input("End", datetime.date.today())
-        
-        # Format for NRQL: SINCE 'YYYY-MM-DD 00:00:00' UNTIL 'YYYY-MM-DD 23:59:59'
         time_clause = f"SINCE '{start_date} 00:00:00' UNTIL '{end_date} 23:59:59'"
     else:
         time_clause = time_ranges[selected_time_label]
         
     st.divider()
-    
-    # Apply Button
-    apply_btn = st.button("Apply Filters", type="primary")
+    apply_btn = st.button("Apply Filters", type="primary", use_container_width=True)
 
 # --- 3. LOGIC ---
 def categorize_alert(row):
@@ -86,12 +127,11 @@ def format_duration(td):
     if hours > 0: return f"{hours}h {minutes}m"
     return f"{minutes}m {seconds}s"
 
-# --- COLOR STYLING FUNCTION ---
 def style_status_column(val):
     if val == 'Active':
-        return 'color: #d32f2f; font-weight: bold;'  # Red
+        return 'color: #ff4b4b; font-weight: bold;'  # Redish Orange
     elif val == 'Closed':
-        return 'color: #2e7d32; font-weight: bold;'  # Green
+        return 'color: #00c853; font-weight: bold;'  # Green
     return ''
 
 # --- 4. DATA FETCHING ---
@@ -124,15 +164,22 @@ def fetch_single_account(client_name, api_key, account_id, time_filter):
     return pd.DataFrame()
 
 # --- 5. MAIN APP ---
-st.title("🛡️ Alerts Summary")
+
+# --- LOGO SECTION (Centered) ---
+# Make sure to save your image as 'logo.png' in the same folder
+try:
+    c1, c2, c3 = st.columns([1, 2, 1]) # Create 3 columns to center the middle one
+    with c2:
+        st.image("logo.png", use_container_width=True) # Ensure file is named logo.png
+except Exception:
+    st.title("🔥 Quickplay") # Fallback if image missing
+
+st.markdown("<h3 style='text-align: center; color: #FF9F1C;'>Incident Overview</h3>", unsafe_allow_html=True)
+st.divider()
 
 if not CLIENTS:
     st.info("⚠️ Please configure the CLIENTS dictionary in the code to see data.")
 else:
-    # --- FETCH DATA ---
-    # Only fetch if button is clicked OR if it's the first load (optional, usually safer to wait for button if using custom dates)
-    # Here we just fetch always but the user can use the button to refresh logic.
-    
     with st.spinner('Syncing with New Relic...'):
         all_data = []
         targets = CLIENTS.items() if selected_view == "All Customers" else [(selected_view, CLIENTS[selected_view])]
@@ -166,7 +213,7 @@ else:
         else:
             df_display = grouped.sort_values(by='start_time', ascending=False)
 
-        # --- UI: TOTAL ALERTS BY CUSTOMER ---
+        # --- UI: VOLUME BY CUSTOMER ---
         if not df_display.empty:
             st.subheader("👥 Volume by Customer")
             
@@ -189,7 +236,7 @@ else:
             )
             st.divider()
 
-        # --- UI: BY ALERTS (GRAPH REMOVED) ---
+        # --- UI: BY ALERTS ---
         st.subheader("🔎 By Alerts")
         
         if df_display.empty:
