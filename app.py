@@ -12,43 +12,30 @@ st.markdown("""
 <style>
     /* GLOBAL THEME */
     .stApp {
-        background-color: #0E1117; /* High contrast dark background */
+        background-color: #0E1117;
         color: #FAFAFA;
     }
 
     /* SIDEBAR STYLING */
     section[data-testid="stSidebar"] {
-        background-color: #161B22; /* GitHub Dark styled sidebar */
+        background-color: #161B22;
         border-right: 1px solid #30363D;
     }
     
-    /* METRIC CARDS (KPIs) */
+    /* METRIC CARDS */
     div[data-testid="stMetric"] {
         background-color: #161B22;
         border: 1px solid #30363D;
         padding: 20px;
         border-radius: 10px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-        transition: transform 0.2s ease, border-color 0.2s ease;
     }
-    div[data-testid="stMetric"]:hover {
-        transform: translateY(-2px);
-        border-color: #FF9F1C; /* Orange glow on hover */
-    }
-    div[data-testid="stMetricLabel"] {
-        color: #8B949E; /* Muted text for labels */
-        font-size: 14px;
-        font-weight: 500;
-    }
-    div[data-testid="stMetricValue"] {
-        color: #FFFFFF;
-        font-size: 28px;
-        font-weight: 700;
-    }
+    div[data-testid="stMetricLabel"] { color: #8B949E; font-size: 14px; font-weight: 500; }
+    div[data-testid="stMetricValue"] { color: #FFFFFF; font-size: 28px; font-weight: 700; }
 
     /* CUSTOM PROGRESS BARS */
     .stProgress > div > div > div > div {
-        background-image: linear-gradient(90deg, #FF9F1C, #FF6B6B); /* Orange gradient */
+        background-image: linear-gradient(90deg, #FF9F1C, #FF6B6B);
     }
 
     /* DATAFRAME & TABLES */
@@ -58,16 +45,9 @@ st.markdown("""
         overflow: hidden;
     }
     
-    /* HEADERS & TYPOGRAPHY */
-    h1, h2, h3 {
-        color: #FAFAFA !important;
-        font-family: 'Inter', sans-serif;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-    }
-    p, span, label {
-        color: #C9D1D9 !important;
-    }
+    /* TEXT ELEMENTS */
+    h1, h2, h3 { color: #FAFAFA !important; font-family: 'Inter', sans-serif; font-weight: 700; }
+    p, span, label { color: #C9D1D9 !important; }
     
     /* BUTTONS */
     div.stButton > button {
@@ -77,7 +57,6 @@ st.markdown("""
         border: none;
         border-radius: 6px;
         padding: 0.5rem 1rem;
-        transition: all 0.2s;
     }
     div.stButton > button:hover {
         background-color: #FFB74D;
@@ -86,11 +65,7 @@ st.markdown("""
     }
 
     /* CENTER LOGO */
-    .logo-container {
-        display: flex;
-        justify_content: center;
-        margin-bottom: 2rem;
-    }
+    .logo-container { display: flex; justify_content: center; margin-bottom: 2rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -103,53 +78,66 @@ except FileNotFoundError:
 
 ENDPOINT = "https://api.newrelic.com/graphql"
 
-# --- 2. SIDEBAR ---
+# --- 2. SESSION STATE INITIALIZATION ---
+# This ensures data stays on screen until you click Apply again
+if 'alert_data' not in st.session_state:
+    st.session_state['alert_data'] = None
+if 'last_updated' not in st.session_state:
+    st.session_state['last_updated'] = None
+
+# --- 3. SIDEBAR CONTROLS ---
 with st.sidebar:
     st.header("🎛️ Controls")
     
-    # Customer Selector
-    customer_keys = list(CLIENTS.keys())
-    customer_options = ["All Customers"] + customer_keys if customer_keys else ["No Clients Configured"]
-    selected_view = st.selectbox("Select Customer", customer_options)
+    # WRAP EVERYTHING IN A FORM so it only runs when you click submit
+    with st.form("filter_form"):
+        # Customer Selector
+        customer_keys = list(CLIENTS.keys())
+        customer_options = ["All Customers"] + customer_keys if customer_keys else ["No Clients Configured"]
+        selected_view = st.selectbox("Select Customer", customer_options)
 
-    st.write("") # Spacer
+        st.write("") 
 
-    # Status Filter (Styled Radio)
-    st.markdown("### Status")
-    status_filter = st.radio(
-        "Status Filter", 
-        ["All", "Active", "Closed"], 
-        horizontal=True, 
-        label_visibility="collapsed"
-    )
+        # Status Filter
+        st.markdown("### Status")
+        status_filter = st.radio(
+            "Status Filter", 
+            ["All", "Active", "Closed"], 
+            horizontal=True, 
+            label_visibility="collapsed"
+        )
 
-    st.write("") # Spacer
+        st.write("") 
 
-    # Time Frame
-    st.markdown("### Time Range")
-    time_ranges = {
-        "Last 60 Minutes": "SINCE 60 minutes ago",
-        "Last 24 Hours": "SINCE 24 hours ago",
-        "Last 3 Days": "SINCE 3 days ago",
-        "Last 7 Days": "SINCE 7 days ago",
-        "Last 30 Days": "SINCE 30 days ago"
-    }
-    time_options = list(time_ranges.keys()) + ["Custom Date Range"]
-    selected_time_label = st.selectbox("Time Frame", time_options, label_visibility="collapsed")
+        # Time Frame
+        st.markdown("### Time Range")
+        time_ranges = {
+            "Last 60 Minutes": "SINCE 60 minutes ago",
+            "Last 24 Hours": "SINCE 24 hours ago",
+            "Last 3 Days": "SINCE 3 days ago",
+            "Last 7 Days": "SINCE 7 days ago",
+            "Last 30 Days": "SINCE 30 days ago"
+        }
+        time_options = list(time_ranges.keys()) + ["Custom Date Range"]
+        selected_time_label = st.selectbox("Time Frame", time_options, label_visibility="collapsed")
 
-    if selected_time_label == "Custom Date Range":
-        col_d1, col_d2 = st.columns(2)
-        start_date = col_d1.date_input("Start", datetime.date.today() - datetime.timedelta(days=1))
-        end_date = col_d2.date_input("End", datetime.date.today())
-        time_clause = f"SINCE '{start_date} 00:00:00' UNTIL '{end_date} 23:59:59'"
-    else:
-        time_clause = time_ranges[selected_time_label]
-        
-    st.divider()
-    apply_btn = st.button("Apply Filters", type="primary", use_container_width=True)
-    st.caption(f"Last updated: {datetime.datetime.now().strftime('%H:%M:%S')}")
+        # Logic for Custom Date inside the form
+        if selected_time_label == "Custom Date Range":
+            col_d1, col_d2 = st.columns(2)
+            start_date = col_d1.date_input("Start", datetime.date.today() - datetime.timedelta(days=1))
+            end_date = col_d2.date_input("End", datetime.date.today())
+            time_clause = f"SINCE '{start_date} 00:00:00' UNTIL '{end_date} 23:59:59'"
+        else:
+            time_clause = time_ranges[selected_time_label]
+            
+        st.divider()
+        # This is the ONLY button that triggers a data refresh
+        submitted = st.form_submit_button("Apply Filters", type="primary", use_container_width=True)
 
-# --- 3. LOGIC ---
+    if st.session_state['last_updated']:
+        st.caption(f"Last updated: {st.session_state['last_updated']}")
+
+# --- 4. HELPER FUNCTIONS ---
 def categorize_alert(row):
     text = (str(row['policyName']) + " " + str(row['conditionName'])).lower()
     infra_keywords = ['cpu', 'memory', 'disk', 'storage', 'network', 'host', 'server', 'load balancer', 'latency', 'k8s', 'kubernetes', 'pod', 'node', 'db', 'database', 'gcp']
@@ -164,15 +152,13 @@ def format_duration(td):
     if h > 0: return f"{h}h {m}m"
     return f"{m}m {s}s"
 
-# Updated styler for better contrast in dark mode
 def style_status_column(val):
     if val == 'Active':
-        return 'color: #FF5252; font-weight: 800;'  # Bright Red
+        return 'color: #FF5252; font-weight: 800;'  
     elif val == 'Closed':
-        return 'color: #69F0AE; font-weight: 700;'  # Bright Green
+        return 'color: #69F0AE; font-weight: 700;' 
     return ''
 
-# --- 4. DATA FETCHING ---
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_single_account(client_name, api_key, account_id, time_filter):
     query = f"""
@@ -194,7 +180,6 @@ def fetch_single_account(client_name, api_key, account_id, time_filter):
             df = pd.DataFrame(data)
             if not df.empty:
                 df['Customer'] = client_name
-                # Normalize columns
                 if 'entity.name' in df.columns: df.rename(columns={'entity.name': 'Entity'}, inplace=True)
                 elif 'entityName' not in df.columns: df['Entity'] = 'System'
                 return df
@@ -202,9 +187,53 @@ def fetch_single_account(client_name, api_key, account_id, time_filter):
         pass
     return pd.DataFrame()
 
-# --- 5. MAIN APP LAYOUT ---
+# --- 5. DATA FETCHING LOGIC (Runs only when Submitted) ---
+if submitted:
+    if not CLIENTS:
+        st.warning("⚠️ Configuration Needed: Please add API keys to secrets.toml")
+    else:
+        with st.spinner('Fetching live incident data...'):
+            all_data = []
+            targets = CLIENTS.items() if selected_view == "All Customers" else [(selected_view, CLIENTS[selected_view])]
+            
+            for name, creds in targets:
+                df_client = fetch_single_account(name, creds['api_key'], creds['account_id'], time_clause)
+                if not df_client.empty: all_data.append(df_client)
 
-# --- HEADER SECTION ---
+            if all_data:
+                raw_df = pd.concat(all_data, ignore_index=True)
+                raw_df['timestamp'] = pd.to_datetime(raw_df['timestamp'], unit='ms')
+                if 'Entity' not in raw_df.columns: raw_df['Entity'] = 'N/A'
+
+                # Aggregation
+                grouped = raw_df.groupby(['incidentId', 'Customer', 'policyName', 'conditionName', 'priority', 'Entity']).agg(
+                    start_time=('timestamp', 'min'),
+                    end_time=('timestamp', 'max'),
+                    event_count=('event', 'nunique')
+                ).reset_index()
+
+                grouped['Status'] = grouped['event_count'].apply(lambda x: 'Active' if x == 1 else 'Closed')
+                now = datetime.datetime.now()
+                grouped['Duration'] = grouped.apply(lambda x: format_duration((now - x['start_time']) if x['Status'] == 'Active' else (x['end_time'] - x['start_time'])), axis=1)
+                grouped['Category'] = grouped.apply(categorize_alert, axis=1)
+                
+                # Filter by Status (Done here so we store the filtered result)
+                if status_filter == "Active":
+                    final_df = grouped[grouped['Status'] == 'Active']
+                elif status_filter == "Closed":
+                    final_df = grouped[grouped['Status'] == 'Closed']
+                else:
+                    final_df = grouped
+                
+                # SAVE TO SESSION STATE
+                st.session_state['alert_data'] = final_df.sort_values(by='start_time', ascending=False)
+                st.session_state['last_updated'] = datetime.datetime.now().strftime('%H:%M:%S')
+            else:
+                st.session_state['alert_data'] = pd.DataFrame() # Empty if no data
+
+# --- 6. DISPLAY LOGIC (Reads from Session State) ---
+
+# Header Section
 try:
     c1, c2, c3 = st.columns([1, 2, 1]) 
     with c2:
@@ -215,169 +244,131 @@ except Exception:
 st.markdown("<h3 style='text-align: center; margin-top: -10px; opacity: 0.8;'>Stability & Incident Overview</h3>", unsafe_allow_html=True)
 st.divider()
 
-if not CLIENTS:
-    st.warning("⚠️ Configuration Needed: Please add API keys to secrets.toml")
+# Main Dashboard Render
+if st.session_state['alert_data'] is None:
+    st.info("👈 Please select your options in the sidebar and click **Apply Filters** to start.")
+elif st.session_state['alert_data'].empty:
+    st.success("No incidents found matching your criteria. Systems are stable! 🎉")
 else:
-    with st.spinner('Fetching live incident data...'):
-        all_data = []
-        targets = CLIENTS.items() if selected_view == "All Customers" else [(selected_view, CLIENTS[selected_view])]
-        
-        for name, creds in targets:
-            df_client = fetch_single_account(name, creds['api_key'], creds['account_id'], time_clause)
-            if not df_client.empty: all_data.append(df_client)
+    df_display = st.session_state['alert_data']
 
-    if all_data:
-        raw_df = pd.concat(all_data, ignore_index=True)
-        raw_df['timestamp'] = pd.to_datetime(raw_df['timestamp'], unit='ms')
-        if 'Entity' not in raw_df.columns: raw_df['Entity'] = 'N/A'
+    # KPI CARDS
+    m1, m2, m3, m4 = st.columns(4)
+    
+    total_incidents = len(df_display)
+    active_now = len(df_display[df_display['Status'] == 'Active'])
+    infra_count = len(df_display[df_display['Category'] == 'Infra'])
+    soc_count = len(df_display[df_display['Category'] == 'SOC'])
 
-        # Aggregation Logic
-        grouped = raw_df.groupby(['incidentId', 'Customer', 'policyName', 'conditionName', 'priority', 'Entity']).agg(
-            start_time=('timestamp', 'min'),
-            end_time=('timestamp', 'max'),
-            event_count=('event', 'nunique')
-        ).reset_index()
+    m1.metric("Total Incidents", total_incidents, border=True)
+    m2.metric("🔥 Active Now", active_now, delta=active_now if active_now > 0 else None, delta_color="inverse", border=True)
+    m3.metric("🏗️ Infra Alerts", infra_count, border=True)
+    m4.metric("🛡️ SOC Alerts", soc_count, border=True)
 
-        grouped['Status'] = grouped['event_count'].apply(lambda x: 'Active' if x == 1 else 'Closed')
-        now = datetime.datetime.now()
-        grouped['Duration'] = grouped.apply(lambda x: format_duration((now - x['start_time']) if x['Status'] == 'Active' else (x['end_time'] - x['start_time'])), axis=1)
-        grouped['Category'] = grouped.apply(categorize_alert, axis=1)
-        
-        # Filtering
-        if status_filter == "Active":
-            df_display = grouped[grouped['Status'] == 'Active']
-        elif status_filter == "Closed":
-            df_display = grouped[grouped['Status'] == 'Closed']
-        else:
-            df_display = grouped
-        
-        df_display = df_display.sort_values(by='start_time', ascending=False)
+    st.markdown("###")
 
-        # --- KPI CARDS ROW ---
-        # Using columns to create a "Dashboard Card" look
-        m1, m2, m3, m4 = st.columns(4)
-        
-        total_incidents = len(df_display)
-        active_now = len(df_display[df_display['Status'] == 'Active'])
-        infra_count = len(df_display[df_display['Category'] == 'Infra'])
-        soc_count = len(df_display[df_display['Category'] == 'SOC'])
-
-        m1.metric("Total Incidents", total_incidents, border=True)
-        m2.metric("🔥 Active Now", active_now, delta=active_now if active_now > 0 else None, delta_color="inverse", border=True)
-        m3.metric("🏗️ Infra Alerts", infra_count, border=True)
-        m4.metric("🛡️ SOC Alerts", soc_count, border=True)
-
-        st.markdown("###") # Spacing
-
-        # --- VOLUME BY CUSTOMER ---
-        if not df_display.empty:
-            with st.container():
-                st.subheader("📊 Customer Volume")
-                cust_counts = df_display['Customer'].value_counts().reset_index()
-                cust_counts.columns = ['Customer', 'Total Alerts']
-                
-                st.dataframe(
-                    cust_counts,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Customer": st.column_config.TextColumn("Customer", width="medium"),
-                        "Total Alerts": st.column_config.ProgressColumn(
-                            "Volume",
-                            format="%d",
-                            min_value=0,
-                            max_value=int(cust_counts['Total Alerts'].max()) if not cust_counts.empty else 100,
-                        )
-                    }
-                )
-
-        # --- BY ALERTS SECTION ---
-        st.subheader("🔎 Alert Breakdown")
-        
-        if df_display.empty:
-            st.success(f"No {status_filter.lower()} alerts found. Systems are stable! 🎉")
-        else:
-            top_alerts = df_display['conditionName'].value_counts()
-            
-            # Summary Table
-            summary_df = top_alerts.reset_index()
-            summary_df.columns = ['Alert Condition', 'Frequency']
+    # VOLUME BY CUSTOMER
+    if not df_display.empty:
+        with st.container():
+            st.subheader("📊 Customer Volume")
+            cust_counts = df_display['Customer'].value_counts().reset_index()
+            cust_counts.columns = ['Customer', 'Total Alerts']
             
             st.dataframe(
-                summary_df,
+                cust_counts,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Alert Condition": st.column_config.TextColumn("Condition Name", width="large"),
-                    "Frequency": st.column_config.ProgressColumn(
-                        "Count", 
-                        format="%d", 
-                        min_value=0, 
-                        max_value=int(top_alerts.max())
+                    "Customer": st.column_config.TextColumn("Customer", width="medium"),
+                    "Total Alerts": st.column_config.ProgressColumn(
+                        "Volume",
+                        format="%d",
+                        min_value=0,
+                        max_value=int(cust_counts['Total Alerts'].max()) if not cust_counts.empty else 100,
                     )
                 }
             )
 
-            # Drill Down Expanders
-            st.caption("👇 Click to expand specific alerts and see affected entities")
-            for i, (alert_name, total_count) in enumerate(top_alerts.items()):
-                # Dynamic Icon based on count urgency
-                icon = "🔥" if i < 2 else "⚠️"
-                
-                with st.expander(f"{icon} **{alert_name}** — ({total_count} incidents)"):
-                    subset = df_display[df_display['conditionName'] == alert_name]
-                    entity_counts = subset['Entity'].value_counts().reset_index()
-                    entity_counts.columns = ['Entity Name', 'Count']
-                    
-                    st.dataframe(
-                        entity_counts, 
-                        use_container_width=True, 
-                        hide_index=True,
-                        column_config={
-                            "Entity Name": st.column_config.TextColumn("Affected Entity"),
-                            "Count": st.column_config.NumberColumn("Incidents", format="%d")
-                        }
-                    )
-
-        st.divider()
-
-        # --- DETAILED LOGS TABLE ---
-        st.subheader("📝 Live Incident Logs")
-        
-        common_config = {
-            "start_time": st.column_config.DatetimeColumn("Time (UTC)", format="D MMM, HH:mm"),
-            "Entity": st.column_config.TextColumn("Entity", width="medium"),
-            "conditionName": st.column_config.TextColumn("Condition", width="large"),
-            "Status": st.column_config.TextColumn("State", width="small"),
-            "Duration": st.column_config.TextColumn("Duration", width="small"),
+    # BY ALERTS SECTION
+    st.subheader("🔎 Alert Breakdown")
+    
+    top_alerts = df_display['conditionName'].value_counts()
+    
+    # Summary Table
+    summary_df = top_alerts.reset_index()
+    summary_df.columns = ['Alert Condition', 'Frequency']
+    
+    st.dataframe(
+        summary_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Alert Condition": st.column_config.TextColumn("Condition Name", width="large"),
+            "Frequency": st.column_config.ProgressColumn(
+                "Count", 
+                format="%d", 
+                min_value=0, 
+                max_value=int(top_alerts.max())
+            )
         }
-        cols = ['start_time', 'Customer', 'Entity', 'conditionName', 'priority', 'Status', 'Duration']
+    )
 
-        tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **Security (SOC)**"])
+    # Drill Down Expanders
+    st.caption("👇 Click to expand specific alerts and see affected entities")
+    for i, (alert_name, total_count) in enumerate(top_alerts.items()):
+        icon = "🔥" if i < 2 else "⚠️"
         
-        with tab1:
-            infra_df = df_display[df_display['Category'] == 'Infra']
-            if not infra_df.empty:
-                st.dataframe(
-                    infra_df[cols].style.map(style_status_column, subset=['Status']), 
-                    use_container_width=True, 
-                    hide_index=True, 
-                    column_config=common_config
-                )
-            else:
-                st.info("No Infrastructure incidents recorded.")
+        with st.expander(f"{icon} **{alert_name}** — ({total_count} incidents)"):
+            subset = df_display[df_display['conditionName'] == alert_name]
+            entity_counts = subset['Entity'].value_counts().reset_index()
+            entity_counts.columns = ['Entity Name', 'Count']
+            
+            st.dataframe(
+                entity_counts, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Entity Name": st.column_config.TextColumn("Affected Entity"),
+                    "Count": st.column_config.NumberColumn("Incidents", format="%d")
+                }
+            )
 
-        with tab2:
-            soc_df = df_display[df_display['Category'] == 'SOC']
-            if not soc_df.empty:
-                st.dataframe(
-                    soc_df[cols].style.map(style_status_column, subset=['Status']), 
-                    use_container_width=True, 
-                    hide_index=True, 
-                    column_config=common_config
-                )
-            else:
-                st.info("No SOC incidents recorded.")
+    st.divider()
 
-    else:
-        st.warning("No data returned from New Relic. Check your API keys or Time Frame.")
+    # DETAILED LOGS TABLE
+    st.subheader("📝 Live Incident Logs")
+    
+    common_config = {
+        "start_time": st.column_config.DatetimeColumn("Time (UTC)", format="D MMM, HH:mm"),
+        "Entity": st.column_config.TextColumn("Entity", width="medium"),
+        "conditionName": st.column_config.TextColumn("Condition", width="large"),
+        "Status": st.column_config.TextColumn("State", width="small"),
+        "Duration": st.column_config.TextColumn("Duration", width="small"),
+    }
+    cols = ['start_time', 'Customer', 'Entity', 'conditionName', 'priority', 'Status', 'Duration']
+
+    tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **Security (SOC)**"])
+    
+    with tab1:
+        infra_df = df_display[df_display['Category'] == 'Infra']
+        if not infra_df.empty:
+            st.dataframe(
+                infra_df[cols].style.map(style_status_column, subset=['Status']), 
+                use_container_width=True, 
+                hide_index=True, 
+                column_config=common_config
+            )
+        else:
+            st.info("No Infrastructure incidents recorded.")
+
+    with tab2:
+        soc_df = df_display[df_display['Category'] == 'SOC']
+        if not soc_df.empty:
+            st.dataframe(
+                soc_df[cols].style.map(style_status_column, subset=['Status']), 
+                use_container_width=True, 
+                hide_index=True, 
+                column_config=common_config
+            )
+        else:
+            st.info("No SOC incidents recorded.")
