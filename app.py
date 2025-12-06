@@ -11,19 +11,24 @@ st.set_page_config(page_title="Alerts Summary", layout="wide", page_icon="🛡�
 st.markdown("""
 <style>
     .main > div { padding-top: 2rem; }
+    /* Make metrics look cleaner */
+    div[data-testid="stMetric"] {
+        background-color: #f9f9f9;
+        border: 1px solid #e6e6e6;
+        padding: 10px;
+        border-radius: 5px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 1. CLIENT CONFIGURATION ---
-    # --- 1. CLIENT CONFIGURATION ---
 try:
     CLIENTS = st.secrets["clients"]
 except FileNotFoundError:
-    st.error("Secrets not configured!")
+    st.error("Secrets not configured! Please configure .streamlit/secrets.toml locally or Secrets on Streamlit Cloud.")
     CLIENTS = {}
 
 ENDPOINT = "https://api.newrelic.com/graphql"
-
 
 # --- 2. SIDEBAR ---
 with st.sidebar:
@@ -33,6 +38,10 @@ with st.sidebar:
     
     selected_view = st.selectbox("Select Customer", customer_options)
 
+    # --- STATUS FILTER (NEW) ---
+    status_filter = st.radio("Status", ["All", "Active", "Closed"], horizontal=True)
+
+    # --- TIME FRAME (UPDATED) ---
     time_ranges = {
         "Last 60 Minutes": "SINCE 60 minutes ago",
         "Last 24 Hours": "SINCE 24 hours ago",
@@ -40,9 +49,26 @@ with st.sidebar:
         "Last 7 Days": "SINCE 7 days ago",
         "Last 30 Days": "SINCE 30 days ago"
     }
-    selected_time_label = st.selectbox("Time Frame", list(time_ranges.keys()))
-    time_clause = time_ranges[selected_time_label]
+    # Add "Custom Date Range" to the options
+    time_options = list(time_ranges.keys()) + ["Custom Date Range"]
+    selected_time_label = st.selectbox("Time Frame", time_options)
+
+    # Logic for Custom Date vs Presets
+    if selected_time_label == "Custom Date Range":
+        st.markdown("### Select Dates")
+        col_d1, col_d2 = st.columns(2)
+        start_date = col_d1.date_input("Start", datetime.date.today() - datetime.timedelta(days=1))
+        end_date = col_d2.date_input("End", datetime.date.today())
+        
+        # Format for NRQL: SINCE 'YYYY-MM-DD 00:00:00' UNTIL 'YYYY-MM-DD 23:59:59'
+        time_clause = f"SINCE '{start_date} 00:00:00' UNTIL '{end_date} 23:59:59'"
+    else:
+        time_clause = time_ranges[selected_time_label]
+        
     st.divider()
+    
+    # Apply Button
+    apply_btn = st.button("Apply Filters", type="primary")
 
 # --- 3. LOGIC ---
 def categorize_alert(row):
@@ -103,8 +129,10 @@ st.title("🛡️ Alerts Summary")
 if not CLIENTS:
     st.info("⚠️ Please configure the CLIENTS dictionary in the code to see data.")
 else:
-    st.markdown(f"Overview for **{selected_view}** over **{selected_time_label}**")
-
+    # --- FETCH DATA ---
+    # Only fetch if button is clicked OR if it's the first load (optional, usually safer to wait for button if using custom dates)
+    # Here we just fetch always but the user can use the button to refresh logic.
+    
     with st.spinner('Syncing with New Relic...'):
         all_data = []
         targets = CLIENTS.items() if selected_view == "All Customers" else [(selected_view, CLIENTS[selected_view])]
@@ -130,8 +158,13 @@ else:
         grouped['Duration'] = grouped.apply(lambda x: format_duration((now - x['start_time']) if x['Status'] == 'Active' else (x['end_time'] - x['start_time'])), axis=1)
         grouped['Category'] = grouped.apply(categorize_alert, axis=1)
         
-        # Sort logs by time
-        df_display = grouped.sort_values(by='start_time', ascending=False)
+        # --- APPLY STATUS FILTER ---
+        if status_filter == "Active":
+            df_display = grouped[grouped['Status'] == 'Active'].sort_values(by='start_time', ascending=False)
+        elif status_filter == "Closed":
+            df_display = grouped[grouped['Status'] == 'Closed'].sort_values(by='start_time', ascending=False)
+        else:
+            df_display = grouped.sort_values(by='start_time', ascending=False)
 
         # --- UI: TOTAL ALERTS BY CUSTOMER ---
         if not df_display.empty:
@@ -156,106 +189,62 @@ else:
             )
             st.divider()
 
-        # --- UI: INTERACTIVE CHART & BY ALERTS ---
-        col_chart, col_drill = st.columns([2, 1])
+        # --- UI: BY ALERTS (GRAPH REMOVED) ---
+        st.subheader("🔎 By Alerts")
+        
+        if df_display.empty:
+            st.info(f"No {status_filter} alerts found for this criteria.")
+        else:
+            top_alerts = df_display['conditionName'].value_counts()
 
-        with col_chart:
-            st.subheader(f"📊 Volume ({selected_time_label})")
+            # 1. SUMMARY TABLE
+            summary_df = top_alerts.reset_index()
+            summary_df.columns = ['Alert Name', 'Count']
             
-            # --- ALTAIR INTERACTIVE CHART ---
+            st.dataframe(
+                summary_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Alert Name": st.column_config.TextColumn("Alert Condition", width="medium"),
+                    "Count": st.column_config.ProgressColumn(
+                        "Frequency", 
+                        format="%d", 
+                        min_value=0, 
+                        max_value=int(top_alerts.max())
+                    )
+                }
+            )
             
-            if "Minutes" in selected_time_label:
-                time_unit = 'yearmonthdatehoursminutes' 
-                x_format = '%H:%M'
-                tooltip_format = '%H:%M'
+            st.write("---")
+            st.caption("Drill Down (Affected Entities)")
+
+            # 2. DRILL DOWN LIST
+            for i, (alert_name, total_count) in enumerate(top_alerts.items()):
+                icon = "🔥" if i == 0 else "🚨"
+                label_text = f"{icon} {alert_name}"
                 
-            elif "30 Days" in selected_time_label:
-                time_unit = 'yearweek'
-                x_format = 'Week %U'
-                tooltip_format = '%d %b'
-                
-            else:
-                time_unit = 'yearmonthdate'
-                x_format = '%d %b'
-                tooltip_format = '%d %b'
-
-            selection = alt.selection_point(fields=['conditionName'], bind='legend')
-
-            chart = alt.Chart(df_display).mark_area(interpolate='monotone').encode(
-                x=alt.X('start_time', title='Time', timeUnit=time_unit, axis=alt.Axis(format=x_format, labelOverlap=True)),
-                y=alt.Y('count()', title='Incident Count', stack=True),
-                color=alt.Color('conditionName', legend=alt.Legend(title="Alert Type", orient='bottom', columns=1)),
-                opacity=alt.condition(selection, alt.value(0.7), alt.value(0.05)),
-                tooltip=[
-                    alt.Tooltip('conditionName', title='Alert'),
-                    alt.Tooltip('count()', title='Count'),
-                    alt.Tooltip('start_time', title='Time', format=tooltip_format, timeUnit=time_unit)
-                ]
-            ).add_params(
-                selection
-            ).properties(
-                height=400
-            ).interactive()
-
-            st.altair_chart(chart, use_container_width=True)
-
-        with col_drill:
-            st.subheader("🔎 By Alerts")
-            
-            top_alerts = df_display['conditionName'].value_counts().head(10)
-
-            if top_alerts.empty:
-                st.info("No alerts to display.")
-            else:
-                # 1. SUMMARY TABLE (Alert + Count)
-                summary_df = top_alerts.reset_index()
-                summary_df.columns = ['Alert Name', 'Count']
-                
-                st.dataframe(
-                    summary_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Alert Name": st.column_config.TextColumn("Alert Condition", width="medium"),
-                        "Count": st.column_config.ProgressColumn(
-                            "Frequency", 
-                            format="%d", 
-                            min_value=0, 
-                            max_value=int(top_alerts.max())
-                        )
-                    }
-                )
-                
-                st.write("---")
-                st.caption("Drill Down (Affected Entities)")
-
-                # 2. EXPANDERS (Dropdowns)
-                for i, (alert_name, total_count) in enumerate(top_alerts.items()):
-                    icon = "🔥" if i == 0 else "🚨"
-                    # Simplified label since the table above has the stats
-                    label_text = f"{icon} {alert_name}"
+                with st.expander(label_text):
+                    subset = df_display[df_display['conditionName'] == alert_name]
+                    entity_counts = subset['Entity'].value_counts().reset_index()
+                    entity_counts.columns = ['Entity Name', 'Count']
                     
-                    with st.expander(label_text):
-                        subset = df_display[df_display['conditionName'] == alert_name]
-                        entity_counts = subset['Entity'].value_counts().reset_index()
-                        entity_counts.columns = ['Entity Name', 'Count']
-                        
-                        st.dataframe(
-                            entity_counts, 
-                            use_container_width=True, 
-                            hide_index=True,
-                            column_config={
-                                "Count": st.column_config.ProgressColumn(
-                                    "Impact", 
-                                    format="%d", 
-                                    max_value=int(total_count)
-                                )
-                            }
-                        )
+                    st.dataframe(
+                        entity_counts, 
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            "Count": st.column_config.ProgressColumn(
+                                "Impact", 
+                                format="%d", 
+                                max_value=int(total_count)
+                            )
+                        }
+                    )
 
         st.divider()
 
-        # --- UI: DETAILED LOGS (WITH COLORS) ---
+        # --- UI: DETAILED LOGS ---
         st.subheader("📝 Detailed Logs")
         
         common_config = {
