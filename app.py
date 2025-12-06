@@ -11,24 +11,34 @@ st.set_page_config(page_title="Quickplay Stability", layout="wide", page_icon="�
 # --- CUSTOM CSS (FINAL CLEAN UI & THEME) ---
 st.markdown("""
 <style>
-    /* 🛑 HIDE STREAMLIT UI ELEMENTS FOR CLEAN SHARING 🛑 */
-    #MainMenu, header, footer {
-        visibility: hidden !important;
-    }
-    
     /* GLOBAL THEME */
     .stApp {
         background-color: #0E1117;
         color: #FAFAFA;
     }
 
-    /* SIDEBAR STYLING */
+    /* 🛑 HIDE STREAMLIT UI ELEMENTS FOR CLEAN SHARING 🛑 */
+    #MainMenu, header, footer {
+        visibility: hidden !important;
+    }
+    
+    /* SIDEBAR STYLING - LIGHT ORANGE BACKGROUND */
     section[data-testid="stSidebar"] {
-        background-color: #161B22;
+        background-color: #FFB74D; /* Light Orange */
         border-right: 1px solid #30363D;
     }
     
-    /* METRIC CARDS */
+    /* SIDEBAR TEXT COLOR - Ensure dark text for contrast on light background */
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3, 
+    section[data-testid="stSidebar"] label, 
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span {
+        color: #0E1117 !important; /* Dark text for contrast */
+    }
+    
+    /* METRIC CARDS (Kept Dark for contrast with Main Page) */
     div[data-testid="stMetric"] {
         background-color: #161B22;
         border: 1px solid #30363D;
@@ -55,7 +65,7 @@ st.markdown("""
     h1, h2, h3 { color: #FAFAFA !important; font-family: 'Inter', sans-serif; font-weight: 700; }
     p, span, label { color: #C9D1D9 !important; }
     
-    /* BUTTONS */
+    /* BUTTONS (Kept Orange for theme consistency) */
     div.stButton > button {
         background-color: #FF9F1C;
         color: #0E1117;
@@ -92,7 +102,7 @@ if 'last_updated' not in st.session_state:
 
 # --- 3. SIDEBAR CONTROLS ---
 with st.sidebar:
-    st.header("🎛️ Controls")
+    # Removed st.header("🎛️ Controls")
     
     with st.form("filter_form"):
         # Customer Selector
@@ -360,7 +370,7 @@ else:
     }
     cols = ['start_time', 'Customer', 'Entity', 'conditionName', 'priority', 'Status', 'Duration']
 
-    # Tabs (Infrastructure and SOC)
+    # UPDATED: Changed "Security (SOC)" to "SOC"
     tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **SOC**"])
     
     with tab1:
