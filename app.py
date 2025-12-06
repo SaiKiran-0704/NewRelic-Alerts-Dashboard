@@ -22,23 +22,13 @@ st.markdown("""
         visibility: hidden !important;
     }
     
-    /* SIDEBAR STYLING - LIGHT ORANGE BACKGROUND */
+    /* SIDEBAR STYLING - REVERTED TO DARK BACKGROUND */
     section[data-testid="stSidebar"] {
-        background-color: #FFB74D; /* Light Orange */
+        background-color: #161B22; 
         border-right: 1px solid #30363D;
     }
     
-    /* SIDEBAR TEXT COLOR - Ensure dark text for contrast on light background */
-    section[data-testid="stSidebar"] h1, 
-    section[data-testid="stSidebar"] h2, 
-    section[data-testid="stSidebar"] h3, 
-    section[data-testid="stSidebar"] label, 
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span {
-        color: #0E1117 !important; /* Dark text for contrast */
-    }
-    
-    /* METRIC CARDS (Kept Dark for contrast with Main Page) */
+    /* METRIC CARDS */
     div[data-testid="stMetric"] {
         background-color: #161B22;
         border: 1px solid #30363D;
@@ -65,7 +55,7 @@ st.markdown("""
     h1, h2, h3 { color: #FAFAFA !important; font-family: 'Inter', sans-serif; font-weight: 700; }
     p, span, label { color: #C9D1D9 !important; }
     
-    /* BUTTONS (Kept Orange for theme consistency) */
+    /* BUTTONS */
     div.stButton > button {
         background-color: #FF9F1C;
         color: #0E1117;
@@ -102,7 +92,6 @@ if 'last_updated' not in st.session_state:
 
 # --- 3. SIDEBAR CONTROLS ---
 with st.sidebar:
-    # Removed st.header("🎛️ Controls")
     
     with st.form("filter_form"):
         # Customer Selector
@@ -370,7 +359,7 @@ else:
     }
     cols = ['start_time', 'Customer', 'Entity', 'conditionName', 'priority', 'Status', 'Duration']
 
-    # UPDATED: Changed "Security (SOC)" to "SOC"
+    # Tabs (Infrastructure and SOC)
     tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **SOC**"])
     
     with tab1:
