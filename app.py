@@ -8,54 +8,53 @@ from PIL import Image
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Quickplay Stability", layout="wide", page_icon="🔥")
 
-# --- CUSTOM CSS (ORANGE & BLACK THEME) ---
+# --- CUSTOM CSS (ORANGE BACKGROUND THEME) ---
 st.markdown("""
 <style>
-    /* 1. Main Background - Black/Dark Grey */
+    /* 1. Main Background - Orange */
     .stApp {
-        background-color: #0e1117;
+        background-color: #E65100; /* Dark Orange background */
         color: #ffffff;
     }
     
-    /* 2. Sidebar Background - Slightly lighter black */
+    /* 2. Sidebar Background - Dark Grey/Black for contrast */
     section[data-testid="stSidebar"] {
-        background-color: #161b22;
+        background-color: #1a1a1a;
     }
     
-    /* 3. Metrics Cards - Dark card with Orange Border */
+    /* 3. Metric Cards - Darker Orange/Brown to stand out against the background */
     div[data-testid="stMetric"] {
-        background-color: #161b22;
-        border: 1px solid #333;
-        border-left: 5px solid #FF9F1C; /* Orange Accent */
+        background-color: #EF6C00; /* Slightly lighter orange than background */
+        border: 1px solid #ffffff;
         padding: 15px;
-        border-radius: 5px;
+        border-radius: 8px;
+        color: white;
     }
     
-    /* 4. Progress Bars - Orange */
-    .stProgress > div > div > div > div {
-        background-color: #FF9F1C;
+    /* 4. Tables (Dataframes) - Make them readable */
+    div[data-testid="stDataFrame"] {
+        background-color: #ffffff;
+        color: #000000;
+        border-radius: 10px;
+        padding: 10px;
     }
     
     /* 5. Headers & Text */
-    h1, h2, h3, h4, h5, h6, p, span {
+    h1, h2, h3, h4, h5, h6, p, span, div, label {
         color: #ffffff !important;
         font-family: 'Helvetica Neue', sans-serif;
     }
     
-    /* 6. Buttons - Orange */
+    /* 6. Buttons - White with Orange Text */
     div.stButton > button {
-        background-color: #FF9F1C;
-        color: white;
+        background-color: #ffffff;
+        color: #E65100;
+        font-weight: bold;
         border: none;
     }
     div.stButton > button:hover {
-        background-color: #e58e19; /* Darker Orange on Hover */
-        color: white;
-    }
-    
-    /* 7. Radio Buttons (Status Filter) */
-    div[role="radiogroup"] label {
-        color: white !important;
+        background-color: #f0f0f0;
+        color: #E65100;
     }
     
     /* Center the Logo */
@@ -129,9 +128,9 @@ def format_duration(td):
 
 def style_status_column(val):
     if val == 'Active':
-        return 'color: #ff4b4b; font-weight: bold;'  # Redish Orange
+        return 'color: #d32f2f; font-weight: bold;'  # Dark Red
     elif val == 'Closed':
-        return 'color: #00c853; font-weight: bold;'  # Green
+        return 'color: #2e7d32; font-weight: bold;'  # Dark Green
     return ''
 
 # --- 4. DATA FETCHING ---
@@ -166,15 +165,14 @@ def fetch_single_account(client_name, api_key, account_id, time_filter):
 # --- 5. MAIN APP ---
 
 # --- LOGO SECTION (Centered) ---
-# Make sure to save your image as 'logo.png' in the same folder
 try:
-    c1, c2, c3 = st.columns([1, 2, 1]) # Create 3 columns to center the middle one
+    c1, c2, c3 = st.columns([1, 2, 1]) 
     with c2:
-        st.image("logo.png", use_container_width=True) # Ensure file is named logo.png
+        st.image("logo.png", use_container_width=True) 
 except Exception:
-    st.title("🔥 Quickplay") # Fallback if image missing
+    st.title("🔥 Quickplay") 
 
-st.markdown("<h3 style='text-align: center; color: #FF9F1C;'>Incident Overview</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; color: white;'>Incident Overview</h3>", unsafe_allow_html=True)
 st.divider()
 
 if not CLIENTS:
