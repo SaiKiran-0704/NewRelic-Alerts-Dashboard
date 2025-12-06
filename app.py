@@ -8,9 +8,14 @@ from PIL import Image
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Quickplay Stability", layout="wide", page_icon="🔥")
 
-# --- CUSTOM CSS (MODERN ORANGE & BLACK THEME) ---
+# --- CUSTOM CSS (FINAL CLEAN UI & THEME) ---
 st.markdown("""
 <style>
+    /* 🛑 HIDE STREAMLIT UI ELEMENTS FOR CLEAN SHARING 🛑 */
+    #MainMenu, header, footer {
+        visibility: hidden !important;
+    }
+    
     /* GLOBAL THEME */
     .stApp {
         background-color: #0E1117;
@@ -228,13 +233,13 @@ if submitted:
 
 # --- 6. DISPLAY RENDER ---
 
-# --- HEADER SECTION (MASSIVE TITLE) ---
+# HEADER
 try:
     c1, c2, c3 = st.columns([1, 2, 1]) 
     with c2:
         st.image("logo.png", use_container_width=True) 
 except Exception:
-    # Font size bumped to 100px for "Quickplay"
+    # Massive title fallback
     st.markdown("<h1 style='text-align: center; color: #FF9F1C; font-size: 100px; margin-bottom: 0px;'>🔥 Quickplay</h1>", unsafe_allow_html=True)
 
 st.markdown("<h2 style='text-align: center; margin-top: -10px; opacity: 0.8; font-size: 32px;'>Alerts Overview</h2>", unsafe_allow_html=True)
@@ -247,7 +252,7 @@ elif st.session_state['alert_data'].empty:
 else:
     df_main = st.session_state['alert_data']
 
-    # --- KPI METRICS ---
+    # KPI CARDS
     m1, m2, m3, m4 = st.columns(4)
     total_incidents = len(df_main)
     active_now = len(df_main[df_main['Status'] == 'Active'])
@@ -355,7 +360,7 @@ else:
     }
     cols = ['start_time', 'Customer', 'Entity', 'conditionName', 'priority', 'Status', 'Duration']
 
-    # CHANGED: "Security (SOC)" -> "SOC"
+    # Tabs (Infrastructure and SOC)
     tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **SOC**"])
     
     with tab1:
