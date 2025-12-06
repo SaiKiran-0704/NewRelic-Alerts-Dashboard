@@ -15,13 +15,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 1. CLIENT CONFIGURATION ---
-    try:
+    # --- 1. CLIENT CONFIGURATION ---
+try:
     CLIENTS = st.secrets["clients"]
 except FileNotFoundError:
     st.error("Secrets not configured!")
     CLIENTS = {}
 
 ENDPOINT = "https://api.newrelic.com/graphql"
+
 
 # --- 2. SIDEBAR ---
 with st.sidebar:
