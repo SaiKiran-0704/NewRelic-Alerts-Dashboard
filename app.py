@@ -222,19 +222,24 @@ if submitted:
                 
                 st.session_state['alert_data'] = final_df.sort_values(by='start_time', ascending=False)
                 st.session_state['last_updated'] = datetime.datetime.now().strftime('%H:%M:%S')
-                st.session_state['current_view_selection'] = selected_view # Store selection to check later
+                st.session_state['current_view_selection'] = selected_view
             else:
                 st.session_state['alert_data'] = pd.DataFrame()
 
 # --- 6. DISPLAY RENDER ---
+
+# --- HEADER SECTION (UPDATED) ---
+# Used columns to control image sizing, but we use direct markdown for bigger Title text
 try:
     c1, c2, c3 = st.columns([1, 2, 1]) 
     with c2:
         st.image("logo.png", use_container_width=True) 
 except Exception:
-    st.markdown("<h1 style='text-align: center; color: #FF9F1C;'>🔥 Quickplay</h1>", unsafe_allow_html=True)
+    # FALLBACK BIG TITLE IF IMAGE FAILS
+    st.markdown("<h1 style='text-align: center; color: #FF9F1C; font-size: 64px; margin-bottom: 0px;'>🔥 Quickplay</h1>", unsafe_allow_html=True)
 
-st.markdown("<h3 style='text-align: center; margin-top: -10px; opacity: 0.8;'>Stability & Incident Overview</h3>", unsafe_allow_html=True)
+# UPDATED SUBTITLE
+st.markdown("<h2 style='text-align: center; margin-top: -15px; opacity: 0.8; font-size: 32px;'>Alerts Overview</h2>", unsafe_allow_html=True)
 st.divider()
 
 if st.session_state['alert_data'] is None:
@@ -263,8 +268,7 @@ else:
         with st.container():
             st.subheader("📊 Customer Volume")
             
-            # --- NEW: GRAPH FOR "ALL CUSTOMERS" ONLY ---
-            # Checks if the user selected "All Customers" in the sidebar
+            # --- GRAPH FOR "ALL CUSTOMERS" ONLY ---
             if st.session_state.get('current_view_selection') == "All Customers":
                 chart = alt.Chart(df_display).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
                     x=alt.X('Customer', sort='-y', title=None, axis=alt.Axis(labelAngle=-45, labelColor='white')),
