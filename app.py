@@ -238,7 +238,6 @@ try:
     with c2:
         st.image("logo.png", use_container_width=True) 
 except Exception:
-    # Massive title fallback
     st.markdown("<h1 style='text-align: center; color: #FF9F1C; font-size: 100px; margin-bottom: 0px;'>🔥 Quickplay</h1>", unsafe_allow_html=True)
 
 st.markdown("<h2 style='text-align: center; margin-top: -10px; opacity: 0.8; font-size: 32px;'>Alerts Overview</h2>", unsafe_allow_html=True)
@@ -251,7 +250,7 @@ elif st.session_state['alert_data'].empty:
 else:
     df_main = st.session_state['alert_data']
 
-    # KPI CARDS
+    # --- KPI METRICS ---
     m1, m2, m3, m4 = st.columns(4)
     total_incidents = len(df_main)
     active_now = len(df_main[df_main['Status'] == 'Active'])
@@ -304,8 +303,26 @@ else:
     if clicked_customer:
         df_drilldown = df_main[df_main['Customer'] == clicked_customer]
 
+    # --- NEW: ALERT CONDITION VOLUME CHART (If Single Customer is Selected) ---
+    is_single_customer_view = (st.session_state.get('current_view_selection') != "All Customers") or (clicked_customer is not None)
+    
+    if is_single_customer_view and not df_drilldown.empty:
+        # Determine title dynamically
+        current_customer_name = clicked_customer if clicked_customer else st.session_state.get('current_view_selection', 'Customer')
+        st.subheader(f"📈 Alert Condition Volume for {current_customer_name}")
+        
+        condition_chart = alt.Chart(df_drilldown).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+            x=alt.X('conditionName', sort='-y', title='Condition Name', axis=alt.Axis(labelAngle=-45, labelColor='white')),
+            y=alt.Y('count()', title='Incident Count', axis=alt.Axis(labelColor='white', titleColor='white')),
+            color=alt.value('#FF9F1C'),
+            tooltip=['conditionName', 'count()']
+        ).properties(height=350).configure_view(strokeWidth=0)
+        
+        st.altair_chart(condition_chart, use_container_width=True)
+        st.divider() 
+
+
     # --- ALERTS SECTION ---
-    st.divider()
     title_suffix = f"for {clicked_customer}" if clicked_customer else ""
     st.subheader(f"🔎 Alert Breakdown {title_suffix}")
     
