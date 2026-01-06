@@ -405,7 +405,7 @@ st.divider()
 
 # ---------------- CUSTOMER CHART (CLICKABLE) ----------------
 if customer == "All Customers":
-    st.markdown("### Alerts by Customer (click to filter)")
+    st.markdown("### Alerts by Customer")
 
     selection = alt.selection_point(encodings=["x"], name="select_customer")
 
