@@ -260,9 +260,6 @@ def generate_better_insights(df, time_label):
         if top_count > total * 0.3:
             recommendations.append(f"🎯 '{top_condition}' causes {(top_count/total)*100:.0f}% of alerts - Needs investigation")
     
-    if total > 50:
-        recommendations.append("🎯 High alert volume - Implement alert grouping/deduplication")
-    
     if len(recommendations) == 0:
         recommendations.append("✅ Alert conditions look well-tuned")
     
