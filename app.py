@@ -11,7 +11,7 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- CLEAN UI THEME ----------------
+# ---------------- SIMPLE CLEAN UI ----------------
 st.markdown("""
 <style>
 .stApp {
@@ -26,15 +26,13 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid #2A2F3A;
 }
 
-h1, h2, h3 {
-    font-weight: 600;
-}
+h1, h2, h3 { font-weight: 600; }
 
-.metric-card {
+div[data-testid="stMetric"] {
     background-color: #151821;
     border: 1px solid #2A2F3A;
     border-radius: 10px;
-    padding: 20px;
+    padding: 16px;
 }
 
 .stDataFrame {
@@ -44,7 +42,7 @@ h1, h2, h3 {
 
 div.stButton > button {
     background-color: #FF9F1C;
-    color: black;
+    color: #000;
     border-radius: 6px;
     font-weight: 600;
 }
@@ -56,8 +54,8 @@ CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
 
 # ---------------- SESSION ----------------
-if "data" not in st.session_state:
-    st.session_state.data = None
+if "alerts" not in st.session_state:
+    st.session_state.alerts = None
 if "updated" not in st.session_state:
     st.session_state.updated = None
 
@@ -70,7 +68,7 @@ with st.sidebar:
         ["All Customers"] + list(CLIENTS.keys())
     )
 
-    status = st.radio(
+    status_filter = st.radio(
         "Status",
         ["All", "Active", "Closed"],
         horizontal=True
@@ -81,11 +79,10 @@ with st.sidebar:
         "Last 24 Hours": "SINCE 24 hours ago",
         "Last 7 Days": "SINCE 7 days ago"
     }
-
     time_label = st.selectbox("Time Range", list(time_map.keys()))
     time_clause = time_map[time_label]
 
-    apply = st.button("Apply")
+    apply = st.button("Apply Filters", use_container_width=True)
 
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
@@ -99,11 +96,13 @@ def format_duration(td):
     h, m = divmod(m, 60)
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
-def status_style(v):
-    return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
+def style_status(v):
+    if v == "Active":
+        return "color:#FF5C5C;font-weight:600"
+    return "color:#6EE7B7;font-weight:600"
 
 @st.cache_data(ttl=300)
-def fetch_data(name, api_key, account_id, time_clause):
+def fetch_account(name, api_key, account_id, time_clause):
     query = f"""
     {{
       actor {{
@@ -127,13 +126,13 @@ def fetch_data(name, api_key, account_id, time_clause):
     return df
 
 # ---------------- LOAD DATA ----------------
-if apply or st.session_state.data is None:
+if apply or st.session_state.alerts is None:
     all_rows = []
     targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
 
-    with st.spinner("Loading alerts…"):
+    with st.spinner("Fetching alerts…"):
         for name, cfg in targets:
-            df = fetch_data(name, cfg["api_key"], cfg["account_id"], time_clause)
+            df = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
             if not df.empty:
                 all_rows.append(df)
 
@@ -144,8 +143,8 @@ if apply or st.session_state.data is None:
         grouped = raw.groupby(
             ["incidentId", "Customer", "conditionName", "priority", "Entity"]
         ).agg(
-            start=("timestamp", "min"),
-            end=("timestamp", "max"),
+            start_time=("timestamp", "min"),
+            end_time=("timestamp", "max"),
             events=("event", "nunique")
         ).reset_index()
 
@@ -153,24 +152,25 @@ if apply or st.session_state.data is None:
         now = datetime.datetime.utcnow()
         grouped["Duration"] = grouped.apply(
             lambda r: format_duration(
-                now - r.start if r.Status == "Active" else r.end - r.start
-            ), axis=1
+                (now - r.start_time) if r.Status == "Active" else (r.end_time - r.start_time)
+            ),
+            axis=1
         )
 
-        if status != "All":
-            grouped = grouped[grouped["Status"] == status]
+        if status_filter != "All":
+            grouped = grouped[grouped["Status"] == status_filter]
 
-        st.session_state.data = grouped.sort_values("start", ascending=False)
+        st.session_state.alerts = grouped.sort_values("start_time", ascending=False)
         st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
     else:
-        st.session_state.data = pd.DataFrame()
+        st.session_state.alerts = pd.DataFrame()
 
 # ---------------- HEADER ----------------
 st.markdown("## 🔥 Quickplay Alerts")
-st.caption("Live alert overview — simple, clear, actionable")
+st.caption("Simple, clear alert overview with entity-level visibility")
 st.divider()
 
-df = st.session_state.data
+df = st.session_state.alerts
 if df.empty:
     st.success("No alerts found 🎉")
     st.stop()
@@ -191,7 +191,6 @@ if customer == "All Customers":
         tooltip=["Customer", "count()"],
         color=alt.value("#FF9F1C")
     ).properties(height=260)
-
     st.altair_chart(cust_chart, use_container_width=True)
 
 st.markdown("### Alerts by Condition")
@@ -201,23 +200,38 @@ cond_chart = alt.Chart(df).mark_bar().encode(
     tooltip=["conditionName", "count()"],
     color=alt.value("#FF9F1C")
 ).properties(height=300)
-
 st.altair_chart(cond_chart, use_container_width=True)
 
 st.divider()
 
-# ---------------- TABLE ----------------
-st.markdown("### Live Alerts")
+# ---------------- ENTITY BREAKDOWN (UNCHANGED LOGIC) ----------------
+st.markdown("### 🔎 Alert Breakdown by Entity")
+st.caption("Click a condition to see impacted entities")
 
-display_cols = ["start", "Customer", "Entity", "conditionName", "priority", "Status", "Duration"]
+top_conditions = df["conditionName"].value_counts()
+
+for condition, count in top_conditions.items():
+    with st.expander(f"⚠️ {condition} ({count})"):
+        subset = df[df["conditionName"] == condition]
+        entity_counts = subset["Entity"].value_counts().reset_index()
+        entity_counts.columns = ["Entity", "Alerts"]
+        st.dataframe(entity_counts, use_container_width=True, hide_index=True)
+
+st.divider()
+
+# ---------------- LIVE ALERT LOGS ----------------
+st.markdown("### 📝 Live Alert Logs")
+
+cols = ["start_time", "Customer", "Entity", "conditionName", "priority", "Status", "Duration"]
 
 st.dataframe(
-    df[display_cols].style.map(status_style, subset=["Status"]),
+    df[cols].style.map(style_status, subset=["Status"]),
     use_container_width=True,
     hide_index=True,
     column_config={
-        "start": st.column_config.DatetimeColumn("Start Time (UTC)"),
+        "start_time": st.column_config.DatetimeColumn("Start Time (UTC)"),
         "conditionName": st.column_config.TextColumn("Condition"),
-        "priority": st.column_config.TextColumn("Priority")
+        "priority": st.column_config.TextColumn("Priority"),
+        "Entity": st.column_config.TextColumn("Entity")
     }
 )
