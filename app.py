@@ -1,51 +1,4 @@
-# ---------------- KPIs ----------------
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Total Alerts", len(df_view))
-c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
-c3.metric("Resolved", len(df_view[df_view["Status"] == "Closed"]))
-c4.metric("Critical", len(df_view[df_view["priority"] == "CRITICAL"]))
-
-st.divider()
-
-# ---------------- SUMMARY & INSIGHTS ----------------
-st.markdown("### 📋 Alert Summary & Analysis")
-
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.markdown(generate_summary(df_view))
-
-with col2:
-    insights, recommendations = generate_insights(df_view)
-    st.markdown("**Key Insights:**")
-    for insight in insights:
-        st.markdown(f"• {insight}")
-
-st.markdown("**Recommendations:**")
-for rec in recommendations:
-    st.markdown(f"• {rec}")
-
-st.divider()
-
-# ---------------- COMPARISON ----------------
-if st.session_state.clicked_customer or customer != "All Customers":
-    st.markdown("### 📈 Comparison: Last Week vs Last Month")
-    
-    if st.session_state.clicked_customer:
-        cust_name = st.session_state.clicked_customer
-        cfg = CLIENTS[cust_name]
-    else:
-        cust_name = customer
-        cfg = CLIENTS[customer]
-    
-    week_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 7 days ago")
-    month_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 30 days ago")
-    
-    col1, col2 = st.columns(2)
-    col1.metric("Last 7 Days", week_count)
-    col2.metric("Last 30 Days", month_count)
-
-st.divider()import streamlit as st
+import streamlit as st
 import requests
 import pandas as pd
 import datetime
@@ -95,7 +48,7 @@ if "updated" not in st.session_state:
 if "clicked_customer" not in st.session_state:
     st.session_state.clicked_customer = None
 
-# ---------------- SIDEBAR (AUTO) ----------------
+# ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("### Filters")
 
@@ -176,13 +129,11 @@ def generate_summary(df):
     closed = len(df[df["Status"] == "Closed"])
     critical = len(df[df["priority"] == "CRITICAL"])
     
-    summary = f"""
-    **Alert Summary:**
-    - Total Alerts: {total}
-    - Active Now: {active}
-    - Resolved: {closed}
-    - Critical: {critical}
-    """
+    summary = f"""**Alert Summary:**
+- Total Alerts: {total}
+- Active Now: {active}
+- Resolved: {closed}
+- Critical: {critical}"""
     return summary
 
 def generate_insights(df):
@@ -307,12 +258,54 @@ if st.session_state.clicked_customer:
     st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
     if st.button("🔄 Reset to All Customers"):
         st.session_state.clicked_customer = None
-        st.experimental_rerun()
+        st.rerun()
 
 # ---------------- KPIs ----------------
-c1, c2 = st.columns(2)
+c1, c2, c3, c4 = st.columns(4)
 c1.metric("Total Alerts", len(df_view))
 c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
+c3.metric("Resolved", len(df_view[df_view["Status"] == "Closed"]))
+c4.metric("Critical", len(df_view[df_view["priority"] == "CRITICAL"]))
+
+st.divider()
+
+# ---------------- SUMMARY & INSIGHTS ----------------
+st.markdown("### 📋 Alert Summary & Analysis")
+
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.markdown(generate_summary(df_view))
+
+with col2:
+    insights, recommendations = generate_insights(df_view)
+    st.markdown("**Key Insights:**")
+    for insight in insights:
+        st.markdown(f"• {insight}")
+
+st.markdown("**Recommendations:**")
+for rec in recommendations:
+    st.markdown(f"• {rec}")
+
+st.divider()
+
+# ---------------- COMPARISON ----------------
+if st.session_state.clicked_customer or customer != "All Customers":
+    st.markdown("### 📈 Comparison: Last Week vs Last Month")
+    
+    if st.session_state.clicked_customer:
+        cust_name = st.session_state.clicked_customer
+        cfg = CLIENTS[cust_name]
+    else:
+        cust_name = customer
+        cfg = CLIENTS[customer]
+    
+    week_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 7 days ago")
+    month_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 30 days ago")
+    
+    col1, col2 = st.columns(2)
+    col1.metric("Last 7 Days", week_count)
+    col2.metric("Last 30 Days", month_count)
 
 st.divider()
 
@@ -341,7 +334,7 @@ if customer == "All Customers":
         sel = event.selection["select_customer"]
         if sel and "Customer" in sel[0]:
             st.session_state.clicked_customer = sel[0]["Customer"]
-            st.experimental_rerun()
+            st.rerun()
 
 # ---------------- CONDITION CHART ----------------
 st.markdown("### Alerts by Condition")
