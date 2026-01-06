@@ -48,7 +48,7 @@ if "updated" not in st.session_state:
 if "clicked_customer" not in st.session_state:
     st.session_state.clicked_customer = None
 
-# ---------------- SIDEBAR ----------------
+# ---------------- SIDEBAR (AUTO) ----------------
 with st.sidebar:
     st.markdown("### Filters")
 
@@ -56,6 +56,12 @@ with st.sidebar:
         "Customer",
         ["All Customers"] + list(CLIENTS.keys()),
         key="customer_filter"
+    )
+
+    status_filter = st.radio(
+        "Status",
+        ["All", "Active", "Closed"],
+        horizontal=True
     )
 
     time_map = {
@@ -86,90 +92,6 @@ def format_duration(td):
 
 def style_status(v):
     return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
-
-def count_alerts_for_period(name, api_key, account_id, time_clause):
-    """Count total alerts for a given time period"""
-    query = f"""
-    {{
-      actor {{
-        account(id: {account_id}) {{
-          nrql(query: "SELECT count(DISTINCT incidentId) FROM NrAiIncident WHERE event IN ('open','close') {time_clause}") {{
-            results
-          }}
-        }}
-      }}
-    }}
-    """
-    try:
-        r = requests.post(
-            ENDPOINT,
-            json={"query": query},
-            headers={"API-Key": api_key}
-        )
-        result = r.json()
-        if "data" in result and result["data"]["actor"]["account"]["nrql"]["results"]:
-            return result["data"]["actor"]["account"]["nrql"]["results"][0].get("count", 0)
-    except:
-        pass
-    return 0
-
-def generate_summary(df):
-    """Generate alert summary"""
-    if df.empty:
-        return "No alerts in this period"
-    
-    total = len(df)
-    active = len(df[df["Status"] == "Active"])
-    closed = len(df[df["Status"] == "Closed"])
-    critical = len(df[df["priority"] == "CRITICAL"])
-    
-    summary = f"""**Alert Summary:**
-- Total Alerts: {total}
-- Active Now: {active}
-- Resolved: {closed}
-- Critical: {critical}"""
-    return summary
-
-def generate_insights(df):
-    """Generate insights and recommendations"""
-    if df.empty:
-        return [], []
-    
-    insights = []
-    recommendations = []
-    
-    total = len(df)
-    active = len(df[df["Status"] == "Active"])
-    critical = len(df[df["priority"] == "CRITICAL"])
-    
-    # Insights
-    if active > 0:
-        active_pct = (active / total) * 100
-        insights.append(f"🔴 {active_pct:.0f}% of alerts are still active")
-    
-    if critical > 0:
-        insights.append(f"⚠️ {critical} critical alerts detected")
-    
-    # Top condition
-    if "conditionName" in df.columns and not df["conditionName"].empty:
-        top_cond = df["conditionName"].value_counts().iloc[0]
-        top_cond_name = df["conditionName"].value_counts().index[0]
-        insights.append(f"📊 Top condition: '{top_cond_name}' ({top_cond} occurrences)")
-    
-    # Recommendations
-    if active / total > 0.5:
-        recommendations.append("📌 High active rate - consider tuning alert thresholds to reduce false positives")
-    
-    if critical / total > 0.2:
-        recommendations.append("📌 Many critical alerts - review severity settings to prioritize real issues")
-    
-    if total > 20:
-        recommendations.append("📌 High alert volume - implement grouping/deduplication rules")
-    
-    if recommendations == []:
-        recommendations.append("✅ Alert conditions look well-tuned")
-    
-    return insights, recommendations
 
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
@@ -227,6 +149,9 @@ if all_rows:
         axis=1
     )
 
+    if status_filter != "All":
+        grouped = grouped[grouped["Status"] == status_filter]
+
     st.session_state.alerts = grouped.sort_values("start_time", ascending=False)
     st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
 else:
@@ -249,34 +174,12 @@ if st.session_state.clicked_customer:
     st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
     if st.button("🔄 Reset to All Customers"):
         st.session_state.clicked_customer = None
-        st.rerun()
+        st.experimental_rerun()
 
 # ---------------- KPIs ----------------
 c1, c2 = st.columns(2)
 c1.metric("Total Alerts", len(df_view))
 c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
-
-st.divider()
-
-# ---------------- SUMMARY & INSIGHTS ----------------
-st.markdown("### 📋 Alert Summary & Analysis")
-
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.markdown(generate_summary(df_view))
-
-with col2:
-    insights, recommendations = generate_insights(df_view)
-    st.markdown("**Key Insights:**")
-    for insight in insights:
-        st.markdown(f"• {insight}")
-
-st.markdown("**Recommendations:**")
-for rec in recommendations:
-    st.markdown(f"• {rec}")
-
-st.divider()
 
 st.divider()
 
@@ -305,17 +208,41 @@ if customer == "All Customers":
         sel = event.selection["select_customer"]
         if sel and "Customer" in sel[0]:
             st.session_state.clicked_customer = sel[0]["Customer"]
-            st.rerun()
+            st.experimental_rerun()
+
+# ---------------- CONDITION CHART ----------------
+st.markdown("### Alerts by Condition")
+
+cond_chart = alt.Chart(df_view).mark_bar().encode(
+    x=alt.X("conditionName", sort="-y", axis=alt.Axis(labelAngle=-40)),
+    y="count()",
+    tooltip=["conditionName", "count()"],
+    color=alt.value("#FF9F1C")
+).properties(height=300)
+
+st.altair_chart(cond_chart, use_container_width=True)
 
 st.divider()
 
 # ---------------- ENTITY BREAKDOWN ----------------
-st.markdown("### Alert Details by Condition")
+st.markdown("### 🔎 Alert Breakdown by Entity")
 
-top_conditions = df_view["conditionName"].value_counts()
-for cond, cnt in top_conditions.items():
-    with st.expander(f"{cond} ({cnt})"):
+for cond, cnt in df_view["conditionName"].value_counts().items():
+    with st.expander(f"⚠️ {cond} ({cnt})"):
         subset = df_view[df_view["conditionName"] == cond]
-        entity_df = subset[["Entity", "priority", "Status", "Duration"]].copy()
-        entity_df.columns = ["Entity", "Priority", "Status", "Duration"]
+        entity_df = subset["Entity"].value_counts().reset_index()
+        entity_df.columns = ["Entity", "Alerts"]
         st.dataframe(entity_df, use_container_width=True, hide_index=True)
+
+st.divider()
+
+# ---------------- LIVE LOGS ----------------
+st.markdown("### 📝 Live Alert Logs")
+
+cols = ["start_time", "Customer", "Entity", "conditionName", "priority", "Status", "Duration"]
+
+st.dataframe(
+    df_view[cols].style.map(style_status, subset=["Status"]),
+    use_container_width=True,
+    hide_index=True
+)
