@@ -352,15 +352,15 @@ if customer == "All Customers":
 
     cust_chart = (
         alt.Chart(df)
-        .mark_bar()
+        .mark_barh()
         .encode(
-            x=alt.X("Customer", sort="-y"),
-            y="count()",
+            y=alt.Y("Customer", sort="-x"),
+            x="count()",
             tooltip=["Customer", "count()"],
             color=alt.condition(selection, alt.value("#0088CC"), alt.value("#CCCCCC"))
         )
         .add_params(selection)
-        .properties(height=250)
+        .properties(height=300)
     )
 
     event = st.altair_chart(cust_chart, use_container_width=True, on_select="rerun")
@@ -374,12 +374,12 @@ if customer == "All Customers":
 # ---------------- CONDITION CHART ----------------
 st.markdown("### Alerts by Condition")
 
-cond_chart = alt.Chart(df_view).mark_bar().encode(
-    x=alt.X("conditionName", sort="-y", axis=alt.Axis(labelAngle=-30)),
-    y="count()",
+cond_chart = alt.Chart(df_view).mark_barh().encode(
+    y=alt.Y("conditionName", sort="-x"),
+    x="count()",
     tooltip=["conditionName", "count()"],
     color=alt.value("#FF9F1C")
-).properties(height=250)
+).properties(height=300)
 
 st.altair_chart(cond_chart, use_container_width=True)
 
@@ -388,10 +388,11 @@ st.divider()
 # ---------------- ENTITY BREAKDOWN ----------------
 st.markdown("### Alert Breakdown")
 
-for cond, cnt in df_view["conditionName"].value_counts().items():
+top_conditions = df_view["conditionName"].value_counts().head(5)
+for cond, cnt in top_conditions.items():
     with st.expander(f"{cond} ({cnt})"):
         subset = df_view[df_view["conditionName"] == cond]
-        entity_df = subset["Entity"].value_counts().reset_index()
+        entity_df = subset["Entity"].value_counts().head(10).reset_index()
         entity_df.columns = ["Entity", "Count"]
         st.dataframe(entity_df, use_container_width=True, hide_index=True)
 
@@ -405,5 +406,6 @@ cols = ["start_time", "Customer", "Entity", "conditionName", "priority", "Status
 st.dataframe(
     df_view[cols].style.map(style_status, subset=["Status"]),
     use_container_width=True,
-    hide_index=True
+    hide_index=True,
+    height=400
 )
