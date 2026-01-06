@@ -11,69 +11,30 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- CUSTOM STYLING ----------------
+# ---------------- CLEAN UI ----------------
 st.markdown("""
 <style>
-body {
-    background-color: #FF8C00;
-}
-
-.stApp { 
-    background-color: #FF8C00;
-}
-
-.main-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    background-color: #FFFFFF;
-    border-radius: 12px;
-    padding: 30px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-}
-
-#MainMenu, footer, header { 
-    visibility: hidden; 
-}
+.stApp { background-color:#0F1115; color:#E6E6E6; }
+#MainMenu, footer, header { visibility:hidden; }
 
 section[data-testid="stSidebar"] {
-    display: none;
+    background-color:#151821;
+    border-right:1px solid #2A2F3A;
 }
 
 div[data-testid="stMetric"] {
-    background-color: #F8F9FA;
-    border: 1px solid #E0E0E0;
-    border-radius: 8px;
-    padding: 16px;
+    background-color:#151821;
+    border:1px solid #2A2F3A;
+    border-radius:10px;
+    padding:16px;
 }
 
 .stDataFrame {
-    border: 1px solid #E0E0E0;
-    border-radius: 8px;
-}
-
-.header-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-    border-bottom: 2px solid #FF8C00;
-    padding-bottom: 20px;
-}
-
-.title-section {
-    flex: 1;
-}
-
-.filters-section {
-    display: flex;
-    gap: 20px;
-    align-items: flex-end;
+    border:1px solid #2A2F3A;
+    border-radius:8px;
 }
 </style>
 """, unsafe_allow_html=True)
-
-# Wrap main content
-st.markdown('<div class="main-container">', unsafe_allow_html=True)
 
 # ---------------- CONFIG ----------------
 CLIENTS = st.secrets.get("clients", {})
@@ -87,17 +48,12 @@ if "updated" not in st.session_state:
 if "clicked_customer" not in st.session_state:
     st.session_state.clicked_customer = None
 
-# ---------------- HEADER WITH FILTERS ----------------
-col_title, col_filters = st.columns([2, 1])
-
-with col_title:
-    st.markdown("# 🔥 Quickplay SOC Alerts Overview")
-    st.caption("Real-time alert monitoring and analysis")
-
-with col_filters:
+# ---------------- SIDEBAR ----------------
+with st.sidebar:
     st.markdown("### Filters")
+
     customer = st.selectbox(
-        "Select Customer",
+        "Customer",
         ["All Customers"] + list(CLIENTS.keys()),
         key="customer_filter"
     )
@@ -112,8 +68,10 @@ with col_filters:
     time_label = st.selectbox("Time Range", list(time_map.keys()))
     time_clause = time_map[time_label]
 
-st.divider()
+    if st.session_state.updated:
+        st.caption(f"Updated at {st.session_state.updated}")
 
+# Reset click selection when dropdown changes
 if customer != "All Customers":
     st.session_state.clicked_customer = None
 
@@ -124,15 +82,13 @@ def format_duration(td):
         return f"{s}s"
     m, s = divmod(s, 60)
     h, m = divmod(m, 60)
-    d, h = divmod(h, 24)
-    if d:
-        return f"{d}d {h}h"
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
 def style_status(v):
-    return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#22A854;font-weight:600"
+    return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
 
 def count_alerts_for_period(name, api_key, account_id, time_clause):
+    """Count total alerts for a given time period"""
     query = f"""
     {{
       actor {{
@@ -158,6 +114,7 @@ def count_alerts_for_period(name, api_key, account_id, time_clause):
     return 0
 
 def generate_summary(df):
+    """Generate alert summary"""
     if df.empty:
         return "No alerts in this period"
     
@@ -174,6 +131,7 @@ def generate_summary(df):
     return summary
 
 def generate_insights(df):
+    """Generate insights and recommendations"""
     if df.empty:
         return [], []
     
@@ -184,6 +142,7 @@ def generate_insights(df):
     active = len(df[df["Status"] == "Active"])
     critical = len(df[df["priority"] == "CRITICAL"])
     
+    # Insights
     if active > 0:
         active_pct = (active / total) * 100
         insights.append(f"🔴 {active_pct:.0f}% of alerts are still active")
@@ -191,11 +150,13 @@ def generate_insights(df):
     if critical > 0:
         insights.append(f"⚠️ {critical} critical alerts detected")
     
+    # Top condition
     if "conditionName" in df.columns and not df["conditionName"].empty:
         top_cond = df["conditionName"].value_counts().iloc[0]
         top_cond_name = df["conditionName"].value_counts().index[0]
         insights.append(f"📊 Top condition: '{top_cond_name}' ({top_cond} occurrences)")
     
+    # Recommendations
     if active / total > 0.5:
         recommendations.append("📌 High active rate - consider tuning alert thresholds to reduce false positives")
     
@@ -238,7 +199,7 @@ def fetch_account(name, api_key, account_id, time_clause):
 all_rows = []
 targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
 
-with st.spinner("📊 Loading alerts…"):
+with st.spinner("Loading alerts…"):
     for name, cfg in targets:
         df = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
         if not df.empty:
@@ -271,20 +232,29 @@ if all_rows:
 else:
     st.session_state.alerts = pd.DataFrame()
 
+# ---------------- HEADER ----------------
+st.markdown("## 🔥 Quickplay Alerts")
+st.caption("Click a customer to drill down")
+st.divider()
+
 df = st.session_state.alerts
 if df.empty:
-    st.success("✅ No alerts found")
+    st.success("No alerts found 🎉")
     st.stop()
 
-# Filter view
+# ---------------- CUSTOMER DRILLDOWN ----------------
 df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
+    st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
+    if st.button("🔄 Reset to All Customers"):
+        st.session_state.clicked_customer = None
+        st.rerun()
 
 # ---------------- KPIs ----------------
-col1, col2 = st.columns(2)
-col1.metric("Total Alerts", len(df_view))
-col2.metric("Active Now", len(df_view[df_view["Status"] == "Active"]))
+c1, c2 = st.columns(2)
+c1.metric("Total Alerts", len(df_view))
+c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
 
 st.divider()
 
@@ -338,23 +308,23 @@ elif customer != "All Customers":
 
     st.divider()
 
-# ---------------- CUSTOMER CHART ----------------
+# ---------------- CUSTOMER CHART (CLICKABLE) ----------------
 if customer == "All Customers":
-    st.markdown("### Alerts by Customer")
+    st.markdown("### Alerts by Customer (click to filter)")
 
-    selection = alt.selection_point(encodings=["y"], name="select_customer")
+    selection = alt.selection_point(encodings=["x"], name="select_customer")
 
     cust_chart = (
         alt.Chart(df)
-        .mark_barh()
+        .mark_bar()
         .encode(
-            y=alt.Y("Customer", sort="-x"),
-            x="count()",
+            x=alt.X("Customer", sort="-y"),
+            y="count()",
             tooltip=["Customer", "count()"],
-            color=alt.condition(selection, alt.value("#FF8C00"), alt.value("#CCCCCC"))
+            color=alt.condition(selection, alt.value("#FF9F1C"), alt.value("#444"))
         )
         .add_params(selection)
-        .properties(height=250)
+        .properties(height=260)
     )
 
     event = st.altair_chart(cust_chart, use_container_width=True, on_select="rerun")
@@ -365,29 +335,15 @@ if customer == "All Customers":
             st.session_state.clicked_customer = sel[0]["Customer"]
             st.rerun()
 
-# ---------------- CONDITION CHART ----------------
-st.markdown("### Alerts by Condition")
-
-cond_chart = alt.Chart(df_view).mark_barh().encode(
-    y=alt.Y("conditionName", sort="-x"),
-    x="count()",
-    tooltip=["conditionName", "count()"],
-    color=alt.value("#FF8C00")
-).properties(height=300)
-
-st.altair_chart(cond_chart, use_container_width=True)
-
 st.divider()
 
 # ---------------- ENTITY BREAKDOWN ----------------
-st.markdown("### Alert Breakdown by Entity")
+st.markdown("### Alert Details by Condition")
 
-top_conditions = df_view["conditionName"].value_counts().head(5)
+top_conditions = df_view["conditionName"].value_counts()
 for cond, cnt in top_conditions.items():
     with st.expander(f"{cond} ({cnt})"):
         subset = df_view[df_view["conditionName"] == cond]
-        entity_df = subset["Entity"].value_counts().head(10).reset_index()
-        entity_df.columns = ["Entity", "Count"]
+        entity_df = subset[["Entity", "priority", "Status", "Duration"]].copy()
+        entity_df.columns = ["Entity", "Priority", "Status", "Duration"]
         st.dataframe(entity_df, use_container_width=True, hide_index=True)
-
-st.markdown('</div>', unsafe_allow_html=True)
