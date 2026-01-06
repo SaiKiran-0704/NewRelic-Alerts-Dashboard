@@ -11,7 +11,7 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- UI THEME ----------------
+# ---------------- CLEAN UI ----------------
 st.markdown("""
 <style>
 .stApp { background-color:#0F1115; color:#E6E6E6; }
@@ -42,19 +42,20 @@ ENDPOINT = "https://api.newrelic.com/graphql"
 
 # ---------------- SESSION STATE ----------------
 if "alerts" not in st.session_state:
-    st.session_state.alerts = pd.DataFrame()
+    st.session_state.alerts = None
 if "updated" not in st.session_state:
     st.session_state.updated = None
 if "clicked_customer" not in st.session_state:
     st.session_state.clicked_customer = None
 
-# ---------------- SIDEBAR (AUTO REACTIVE) ----------------
+# ---------------- SIDEBAR (AUTO) ----------------
 with st.sidebar:
     st.markdown("### Filters")
 
-    customer_filter = st.selectbox(
+    customer = st.selectbox(
         "Customer",
-        ["All Customers"] + list(CLIENTS.keys())
+        ["All Customers"] + list(CLIENTS.keys()),
+        key="customer_filter"
     )
 
     status_filter = st.radio(
@@ -74,8 +75,8 @@ with st.sidebar:
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
-# Reset click selection if dropdown not All Customers
-if customer_filter != "All Customers":
+# Reset click selection when dropdown changes
+if customer != "All Customers":
     st.session_state.clicked_customer = None
 
 # ---------------- HELPERS ----------------
@@ -115,17 +116,17 @@ def fetch_account(name, api_key, account_id, time_clause):
     return df
 
 # ---------------- LOAD DATA ----------------
-rows = []
-targets = CLIENTS.items() if customer_filter == "All Customers" else [(customer_filter, CLIENTS[customer_filter])]
+all_rows = []
+targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
 
 with st.spinner("Loading alerts…"):
     for name, cfg in targets:
         df = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
         if not df.empty:
-            rows.append(df)
+            all_rows.append(df)
 
-if rows:
-    raw = pd.concat(rows)
+if all_rows:
+    raw = pd.concat(all_rows)
     raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
 
     grouped = raw.groupby(
@@ -164,8 +165,8 @@ if df.empty:
     st.success("No alerts found 🎉")
     st.stop()
 
-# ---------------- APPLY CLICK FILTER ----------------
-df_view = df.copy()
+# ---------------- CUSTOMER DRILLDOWN ----------------
+df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
     st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
@@ -180,38 +181,31 @@ c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
 
 st.divider()
 
-# ---------------- CUSTOMER CHART (STATE-DRIVEN HIGHLIGHT) ----------------
-if customer_filter == "All Customers":
+# ---------------- CUSTOMER CHART (CLICKABLE) ----------------
+if customer == "All Customers":
     st.markdown("### Alerts by Customer (click to filter)")
 
-    customer_counts = (
-        df.groupby("Customer")
-        .size()
-        .reset_index(name="count")
-        .sort_values("count", ascending=False)
+    selection = alt.selection_point(encodings=["x"], name="select_customer")
+
+    cust_chart = (
+        alt.Chart(df)
+        .mark_bar()
+        .encode(
+            x=alt.X("Customer", sort="-y"),
+            y="count()",
+            tooltip=["Customer", "count()"],
+            color=alt.condition(selection, alt.value("#FF9F1C"), alt.value("#444"))
+        )
+        .add_params(selection)
+        .properties(height=260)
     )
 
-    customer_counts["opacity"] = customer_counts["Customer"].apply(
-        lambda c: 1.0 if st.session_state.clicked_customer in (None, c) else 0.25
-    )
-    customer_counts["color"] = customer_counts["Customer"].apply(
-        lambda c: "#FF9F1C" if st.session_state.clicked_customer in (None, c) else "#555555"
-    )
+    event = st.altair_chart(cust_chart, use_container_width=True, on_select="rerun")
 
-    chart = alt.Chart(customer_counts).mark_bar().encode(
-        x=alt.X("Customer", sort="-y"),
-        y="count",
-        tooltip=["Customer", "count"],
-        color=alt.Color("color:N", scale=None),
-        opacity=alt.Opacity("opacity:Q", scale=None)
-    ).properties(height=260)
-
-    event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
-
-    if event.selection:
-        selected = list(event.selection.values())
-        if selected and "Customer" in selected[0][0]:
-            st.session_state.clicked_customer = selected[0][0]["Customer"]
+    if event.selection and "select_customer" in event.selection:
+        sel = event.selection["select_customer"]
+        if sel and "Customer" in sel[0]:
+            st.session_state.clicked_customer = sel[0]["Customer"]
             st.experimental_rerun()
 
 # ---------------- CONDITION CHART ----------------
