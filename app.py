@@ -130,46 +130,151 @@ def generate_summary(df):
 - Critical: {critical}"""
     return summary
 
-def generate_insights(df):
-    """Generate insights and recommendations"""
+def calculate_mttr(df):
+    """Calculate Mean Time To Resolution"""
     if df.empty:
-        return [], []
+        return "N/A"
     
-    insights = []
-    recommendations = []
+    closed_alerts = df[df["Status"] == "Closed"]
+    if len(closed_alerts) == 0:
+        return "No resolved alerts yet"
+    
+    durations = []
+    for duration_str in closed_alerts["Duration"]:
+        # Parse duration string like "2h 30m" or "45m" etc
+        try:
+            total_minutes = 0
+            parts = duration_str.split()
+            for i, part in enumerate(parts):
+                if 'd' in part:
+                    total_minutes += int(part.replace('d', '')) * 1440
+                elif 'h' in part:
+                    total_minutes += int(part.replace('h', '')) * 60
+                elif 'm' in part:
+                    total_minutes += int(part.replace('m', ''))
+                elif 's' in part:
+                    total_minutes += int(part.replace('s', '')) / 60
+            durations.append(total_minutes)
+        except:
+            pass
+    
+    if durations:
+        avg_minutes = sum(durations) / len(durations)
+        hours = int(avg_minutes // 60)
+        minutes = int(avg_minutes % 60)
+        return f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+    return "N/A"
+
+def get_alert_frequency(df, time_label):
+    """Calculate alerts per hour/day based on time period"""
+    if df.empty:
+        return "N/A"
+    
+    total_alerts = len(df)
+    
+    if "6 Hours" in time_label:
+        freq = total_alerts / 6
+        return f"{freq:.1f} per hour"
+    elif "24 Hours" in time_label:
+        freq = total_alerts / 24
+        return f"{freq:.1f} per hour"
+    elif "7 Days" in time_label:
+        freq = total_alerts / 7
+        return f"{freq:.1f} per day"
+    elif "1 Month" in time_label:
+        freq = total_alerts / 30
+        return f"{freq:.1f} per day"
+    elif "3 Months" in time_label:
+        freq = total_alerts / 90
+        return f"{freq:.1f} per day"
+    
+    return f"{total_alerts} total"
+
+def get_resolution_rate(df):
+    """Calculate % of alerts that have been resolved"""
+    if df.empty:
+        return "0%"
+    
+    total = len(df)
+    resolved = len(df[df["Status"] == "Closed"])
+    rate = (resolved / total) * 100
+    return f"{rate:.0f}%"
+
+def get_top_3_entities(df):
+    """Get top 3 most affected entities"""
+    if df.empty or "Entity" not in df.columns:
+        return []
+    
+    top_entities = df["Entity"].value_counts().head(3)
+    result = []
+    for entity, count in top_entities.items():
+        result.append((entity, count))
+    return result
+
+def calculate_alert_trend(df_current, time_label):
+    """Calculate trend compared to previous period"""
+    if df_current.empty:
+        return "N/A"
+    
+    current_count = len(df_current)
+    
+    # This is a simplified trend - in production you'd fetch previous period data
+    # For now, we'll show a baseline calculation
+    if current_count > 100:
+        return "High volume"
+    elif current_count > 50:
+        return "Moderate volume"
+    else:
+        return "Low volume"
+
+def generate_better_insights(df, time_label):
+    """Generate improved insights with better metrics"""
+    if df.empty:
+        return {
+            "mttr": "N/A",
+            "frequency": "N/A",
+            "resolution_rate": "0%",
+            "top_entities": [],
+            "trend": "N/A",
+            "recommendations": ["No alerts in this period"]
+        }
     
     total = len(df)
     active = len(df[df["Status"] == "Active"])
-    critical = len(df[df["priority"] == "CRITICAL"])
+    resolved = len(df[df["Status"] == "Closed"])
     
-    # Insights
-    if active > 0:
-        active_pct = (active / total) * 100
-        insights.append(f"🔴 {active_pct:.0f}% of alerts are still active")
-    
-    if critical > 0:
-        insights.append(f"⚠️ {critical} critical alerts detected")
-    
-    # Top condition
+    # Get top condition
+    top_condition = "N/A"
     if "conditionName" in df.columns and not df["conditionName"].empty:
         top_cond = df["conditionName"].value_counts().iloc[0]
-        top_cond_name = df["conditionName"].value_counts().index[0]
-        insights.append(f"📊 Top condition: '{top_cond_name}' ({top_cond} occurrences)")
+        top_condition = df["conditionName"].value_counts().index[0]
     
-    # Recommendations
+    recommendations = []
+    
+    # Generate recommendations based on metrics
     if active / total > 0.5:
-        recommendations.append("📌 High active rate - consider tuning alert thresholds to reduce false positives")
+        recommendations.append("🎯 High active rate (>50%) - Consider tuning alert thresholds")
     
-    if critical / total > 0.2:
-        recommendations.append("📌 Many critical alerts - review severity settings to prioritize real issues")
+    if top_condition != "N/A":
+        top_count = df["conditionName"].value_counts().iloc[0]
+        if top_count > total * 0.3:
+            recommendations.append(f"🎯 '{top_condition}' causes {(top_count/total)*100:.0f}% of alerts - Needs investigation")
     
-    if total > 20:
-        recommendations.append("📌 High alert volume - implement grouping/deduplication rules")
+    if total > 50:
+        recommendations.append("🎯 High alert volume - Implement alert grouping/deduplication")
     
-    if recommendations == []:
+    if len(recommendations) == 0:
         recommendations.append("✅ Alert conditions look well-tuned")
     
-    return insights, recommendations
+    return {
+        "mttr": calculate_mttr(df),
+        "frequency": get_alert_frequency(df, time_label),
+        "resolution_rate": get_resolution_rate(df),
+        "top_entities": get_top_3_entities(df),
+        "trend": calculate_alert_trend(df, time_label),
+        "top_condition": top_condition,
+        "recommendations": recommendations
+    }
 
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
@@ -259,21 +364,39 @@ c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
 st.divider()
 
 # ---------------- SUMMARY & INSIGHTS ----------------
-st.markdown("### 📋 Alert Summary & Analysis")
+st.markdown("### 📊 Alert Metrics & Analysis")
 
-col1, col2 = st.columns([1, 1])
+metrics = generate_better_insights(df_view, time_label)
+
+# Display key metrics in columns
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.markdown(generate_summary(df_view))
+    st.metric("Mean Time to Resolve", metrics["mttr"])
+    st.metric("Alert Frequency", metrics["frequency"])
 
 with col2:
-    insights, recommendations = generate_insights(df_view)
-    st.markdown("**Key Insights:**")
-    for insight in insights:
-        st.markdown(f"• {insight}")
+    st.metric("Resolution Rate", metrics["resolution_rate"])
+    st.metric("Volume Status", metrics["trend"])
+
+with col3:
+    st.markdown("**Top Affected Entities:**")
+    if metrics["top_entities"]:
+        for entity, count in metrics["top_entities"]:
+            st.markdown(f"• {entity}: {count} alerts")
+    else:
+        st.markdown("• No entity data available")
+
+st.divider()
+
+st.markdown("**Top Alert Condition:**")
+if metrics["top_condition"] != "N/A":
+    st.markdown(f"🔔 **{metrics['top_condition']}**")
+else:
+    st.markdown("No conditions detected")
 
 st.markdown("**Recommendations:**")
-for rec in recommendations:
+for rec in metrics["recommendations"]:
     st.markdown(f"• {rec}")
 
 st.divider()
