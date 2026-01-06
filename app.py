@@ -1,4 +1,51 @@
-import streamlit as st
+# ---------------- KPIs ----------------
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Total Alerts", len(df_view))
+c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
+c3.metric("Resolved", len(df_view[df_view["Status"] == "Closed"]))
+c4.metric("Critical", len(df_view[df_view["priority"] == "CRITICAL"]))
+
+st.divider()
+
+# ---------------- SUMMARY & INSIGHTS ----------------
+st.markdown("### 📋 Alert Summary & Analysis")
+
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.markdown(generate_summary(df_view))
+
+with col2:
+    insights, recommendations = generate_insights(df_view)
+    st.markdown("**Key Insights:**")
+    for insight in insights:
+        st.markdown(f"• {insight}")
+
+st.markdown("**Recommendations:**")
+for rec in recommendations:
+    st.markdown(f"• {rec}")
+
+st.divider()
+
+# ---------------- COMPARISON ----------------
+if st.session_state.clicked_customer or customer != "All Customers":
+    st.markdown("### 📈 Comparison: Last Week vs Last Month")
+    
+    if st.session_state.clicked_customer:
+        cust_name = st.session_state.clicked_customer
+        cfg = CLIENTS[cust_name]
+    else:
+        cust_name = customer
+        cfg = CLIENTS[customer]
+    
+    week_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 7 days ago")
+    month_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 30 days ago")
+    
+    col1, col2 = st.columns(2)
+    col1.metric("Last 7 Days", week_count)
+    col2.metric("Last 30 Days", month_count)
+
+st.divider()import streamlit as st
 import requests
 import pandas as pd
 import datetime
@@ -92,6 +139,92 @@ def format_duration(td):
 
 def style_status(v):
     return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
+
+def count_alerts_for_period(name, api_key, account_id, time_clause):
+    """Count total alerts for a given time period"""
+    query = f"""
+    {{
+      actor {{
+        account(id: {account_id}) {{
+          nrql(query: "SELECT count(DISTINCT incidentId) FROM NrAiIncident WHERE event IN ('open','close') {time_clause}") {{
+            results
+          }}
+        }}
+      }}
+    }}
+    """
+    try:
+        r = requests.post(
+            ENDPOINT,
+            json={"query": query},
+            headers={"API-Key": api_key}
+        )
+        result = r.json()
+        if "data" in result and result["data"]["actor"]["account"]["nrql"]["results"]:
+            return result["data"]["actor"]["account"]["nrql"]["results"][0].get("count", 0)
+    except:
+        pass
+    return 0
+
+def generate_summary(df):
+    """Generate alert summary"""
+    if df.empty:
+        return "No alerts in this period"
+    
+    total = len(df)
+    active = len(df[df["Status"] == "Active"])
+    closed = len(df[df["Status"] == "Closed"])
+    critical = len(df[df["priority"] == "CRITICAL"])
+    
+    summary = f"""
+    **Alert Summary:**
+    - Total Alerts: {total}
+    - Active Now: {active}
+    - Resolved: {closed}
+    - Critical: {critical}
+    """
+    return summary
+
+def generate_insights(df):
+    """Generate insights and recommendations"""
+    if df.empty:
+        return [], []
+    
+    insights = []
+    recommendations = []
+    
+    total = len(df)
+    active = len(df[df["Status"] == "Active"])
+    critical = len(df[df["priority"] == "CRITICAL"])
+    
+    # Insights
+    if active > 0:
+        active_pct = (active / total) * 100
+        insights.append(f"🔴 {active_pct:.0f}% of alerts are still active")
+    
+    if critical > 0:
+        insights.append(f"⚠️ {critical} critical alerts detected")
+    
+    # Top condition
+    if "conditionName" in df.columns and not df["conditionName"].empty:
+        top_cond = df["conditionName"].value_counts().iloc[0]
+        top_cond_name = df["conditionName"].value_counts().index[0]
+        insights.append(f"📊 Top condition: '{top_cond_name}' ({top_cond} occurrences)")
+    
+    # Recommendations
+    if active / total > 0.5:
+        recommendations.append("📌 High active rate - consider tuning alert thresholds to reduce false positives")
+    
+    if critical / total > 0.2:
+        recommendations.append("📌 Many critical alerts - review severity settings to prioritize real issues")
+    
+    if total > 20:
+        recommendations.append("📌 High alert volume - implement grouping/deduplication rules")
+    
+    if recommendations == []:
+        recommendations.append("✅ Alert conditions look well-tuned")
+    
+    return insights, recommendations
 
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
