@@ -278,35 +278,7 @@ for rec in recommendations:
 
 st.divider()
 
-# ---------------- COMPARISON ----------------
-if st.session_state.clicked_customer:
-    st.markdown("### 📈 Comparison: Last Week vs Last Month")
-    
-    cust_name = st.session_state.clicked_customer
-    cfg = CLIENTS[cust_name]
-    
-    week_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 7 days ago")
-    month_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 30 days ago")
-    
-    col1, col2 = st.columns(2)
-    col1.metric("Last 7 Days", week_count)
-    col2.metric("Last 30 Days", month_count)
-
-    st.divider()
-elif customer != "All Customers":
-    st.markdown("### 📈 Comparison: Last Week vs Last Month")
-    
-    cust_name = customer
-    cfg = CLIENTS[customer]
-    
-    week_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 7 days ago")
-    month_count = count_alerts_for_period(cust_name, cfg["api_key"], cfg["account_id"], "SINCE 30 days ago")
-    
-    col1, col2 = st.columns(2)
-    col1.metric("Last 7 Days", week_count)
-    col2.metric("Last 30 Days", month_count)
-
-    st.divider()
+st.divider()
 
 # ---------------- CUSTOMER CHART (CLICKABLE) ----------------
 if customer == "All Customers":
