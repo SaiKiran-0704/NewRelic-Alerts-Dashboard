@@ -439,6 +439,7 @@ top_conditions = df_view["conditionName"].value_counts()
 for cond, cnt in top_conditions.items():
     with st.expander(f"{cond} ({cnt})"):
         subset = df_view[df_view["conditionName"] == cond]
-        entity_df = subset[["Entity", "priority", "Status", "Duration"]].copy()
-        entity_df.columns = ["Entity", "Priority", "Status", "Duration"]
-        st.dataframe(entity_df, use_container_width=True, hide_index=True)
+        # Group by Entity and count occurrences
+        entity_summary = subset.groupby("Entity").size().reset_index(name="Count")
+        entity_summary = entity_summary.sort_values("Count", ascending=False)
+        st.dataframe(entity_summary, use_container_width=True, hide_index=True)
