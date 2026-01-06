@@ -11,7 +11,7 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- CLEAN UI ----------------
+# ---------------- UI THEME ----------------
 st.markdown("""
 <style>
 .stApp { background-color:#0F1115; color:#E6E6E6; }
@@ -42,20 +42,19 @@ ENDPOINT = "https://api.newrelic.com/graphql"
 
 # ---------------- SESSION STATE ----------------
 if "alerts" not in st.session_state:
-    st.session_state.alerts = None
+    st.session_state.alerts = pd.DataFrame()
 if "updated" not in st.session_state:
     st.session_state.updated = None
 if "clicked_customer" not in st.session_state:
     st.session_state.clicked_customer = None
 
-# ---------------- SIDEBAR ----------------
+# ---------------- SIDEBAR (AUTO REACTIVE) ----------------
 with st.sidebar:
     st.markdown("### Filters")
 
-    customer = st.selectbox(
+    customer_filter = st.selectbox(
         "Customer",
-        ["All Customers"] + list(CLIENTS.keys()),
-        key="customer_filter"
+        ["All Customers"] + list(CLIENTS.keys())
     )
 
     status_filter = st.radio(
@@ -75,8 +74,8 @@ with st.sidebar:
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
-# Reset clicked bar if dropdown is not All Customers
-if customer != "All Customers":
+# Reset click selection if dropdown not All Customers
+if customer_filter != "All Customers":
     st.session_state.clicked_customer = None
 
 # ---------------- HELPERS ----------------
@@ -89,11 +88,7 @@ def format_duration(td):
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
 def style_status(v):
-    return (
-        "color:#FF5C5C;font-weight:600"
-        if v == "Active"
-        else "color:#6EE7B7;font-weight:600"
-    )
+    return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
 
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
@@ -120,17 +115,17 @@ def fetch_account(name, api_key, account_id, time_clause):
     return df
 
 # ---------------- LOAD DATA ----------------
-all_rows = []
-targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
+rows = []
+targets = CLIENTS.items() if customer_filter == "All Customers" else [(customer_filter, CLIENTS[customer_filter])]
 
 with st.spinner("Loading alerts…"):
     for name, cfg in targets:
         df = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
         if not df.empty:
-            all_rows.append(df)
+            rows.append(df)
 
-if all_rows:
-    raw = pd.concat(all_rows)
+if rows:
+    raw = pd.concat(rows)
     raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
 
     grouped = raw.groupby(
@@ -161,7 +156,7 @@ else:
 
 # ---------------- HEADER ----------------
 st.markdown("## 🔥 Quickplay Alerts")
-st.caption("Click a customer to drill down (highlighted)")
+st.caption("Click a customer to drill down")
 st.divider()
 
 df = st.session_state.alerts
@@ -170,7 +165,7 @@ if df.empty:
     st.stop()
 
 # ---------------- APPLY CLICK FILTER ----------------
-df_view = df
+df_view = df.copy()
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
     st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
@@ -185,47 +180,38 @@ c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
 
 st.divider()
 
-# ---------------- CUSTOMER CHART (HIGHLIGHT + FADE) ----------------
-if customer == "All Customers":
+# ---------------- CUSTOMER CHART (STATE-DRIVEN HIGHLIGHT) ----------------
+if customer_filter == "All Customers":
     st.markdown("### Alerts by Customer (click to filter)")
 
-    selection = alt.selection_point(
-        name="select_customer",
-        encodings=["x"]
+    customer_counts = (
+        df.groupby("Customer")
+        .size()
+        .reset_index(name="count")
+        .sort_values("count", ascending=False)
     )
 
-    cust_chart = (
-        alt.Chart(df)
-        .mark_bar()
-        .encode(
-            x=alt.X("Customer", sort="-y"),
-            y="count()",
-            tooltip=["Customer", "count()"],
-            color=alt.condition(
-                selection,
-                alt.value("#FF9F1C"),
-                alt.value("#555555")
-            ),
-            opacity=alt.condition(
-                selection,
-                alt.value(1.0),
-                alt.value(0.25)
-            )
-        )
-        .add_params(selection)
-        .properties(height=260)
+    customer_counts["opacity"] = customer_counts["Customer"].apply(
+        lambda c: 1.0 if st.session_state.clicked_customer in (None, c) else 0.25
+    )
+    customer_counts["color"] = customer_counts["Customer"].apply(
+        lambda c: "#FF9F1C" if st.session_state.clicked_customer in (None, c) else "#555555"
     )
 
-    event = st.altair_chart(
-        cust_chart,
-        use_container_width=True,
-        on_select="rerun"
-    )
+    chart = alt.Chart(customer_counts).mark_bar().encode(
+        x=alt.X("Customer", sort="-y"),
+        y="count",
+        tooltip=["Customer", "count"],
+        color=alt.Color("color:N", scale=None),
+        opacity=alt.Opacity("opacity:Q", scale=None)
+    ).properties(height=260)
 
-    if event.selection and "select_customer" in event.selection:
-        sel = event.selection["select_customer"]
-        if sel and "Customer" in sel[0]:
-            st.session_state.clicked_customer = sel[0]["Customer"]
+    event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
+
+    if event.selection:
+        selected = list(event.selection.values())
+        if selected and "Customer" in selected[0][0]:
+            st.session_state.clicked_customer = selected[0][0]["Customer"]
             st.experimental_rerun()
 
 # ---------------- CONDITION CHART ----------------
@@ -257,15 +243,7 @@ st.divider()
 # ---------------- LIVE LOGS ----------------
 st.markdown("### 📝 Live Alert Logs")
 
-cols = [
-    "start_time",
-    "Customer",
-    "Entity",
-    "conditionName",
-    "priority",
-    "Status",
-    "Duration",
-]
+cols = ["start_time", "Customer", "Entity", "conditionName", "priority", "Status", "Duration"]
 
 st.dataframe(
     df_view[cols].style.map(style_status, subset=["Status"]),
