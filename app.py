@@ -259,13 +259,17 @@ if st.session_state['alert_data'].empty:
 else:
     df_main = st.session_state['alert_data']
 
-    # --- KPI METRICS (UPDATED: INFRA AND SOC REMOVED) ---
-    m1, m2 = st.columns(2)
+    # --- KPI METRICS ---
+    m1, m2, m3, m4 = st.columns(4)
     total_alerts = len(df_main)
     active_now = len(df_main[df_main['Status'] == 'Active'])
+    infra_count = len(df_main[df_main['Category'] == 'Infra'])
+    soc_count = len(df_main[df_main['Category'] == 'SOC'])
 
     m1.metric("Total Alerts", total_alerts, border=True)
     m2.metric("🔥 Active Now", active_now, delta=active_now if active_now > 0 else None, delta_color="inverse", border=True)
+    m3.metric("🏗️ Infra Alerts", infra_count, border=True)
+    m4.metric("🛡️ SOC Alerts", soc_count, border=True)
 
     st.markdown("###")
 
@@ -283,7 +287,7 @@ else:
             tooltip=['Customer', 'count()']
         )
         
-        # Configure Selection
+        # Configure Selection - NAMED "select_customer" FOR SAFETY
         click_selection = alt.selection_point(name="select_customer", encodings=['x'])
         
         chart = base.mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3, cursor='pointer').encode(
@@ -291,9 +295,10 @@ else:
             opacity=alt.condition(click_selection, alt.value(1), alt.value(0.7))
         ).add_params(click_selection).properties(height=320)
 
-        # RENDER CHART
+        # RENDER CHART & CAPTURE SELECTION
         event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
 
+        # CHECK SELECTION SAFELY (Dict Access)
         if event.selection and "select_customer" in event.selection:
             selection_data = event.selection["select_customer"]
             if len(selection_data) > 0 and "Customer" in selection_data[0]:
@@ -337,4 +342,58 @@ else:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Alert Condition
+            "Alert Condition": st.column_config.TextColumn("Condition Name", width="large"),
+            "Frequency": st.column_config.ProgressColumn(
+                "Count", 
+                format="%d", 
+                min_value=0, 
+                max_value=int(top_alerts.max()) if not top_alerts.empty else 100
+            )
+        }
+    )
+
+    st.caption("👇 Click to expand specific alerts and see affected entities")
+    for i, (alert_name, total_count) in enumerate(top_alerts.items()):
+        icon = "🔥" if i < 2 else "⚠️"
+        with st.expander(f"{icon} **{alert_name}** — ({total_count} alerts)"):
+            subset = df_drilldown[df_drilldown['conditionName'] == alert_name]
+            entity_counts = subset['Entity'].value_counts().reset_index()
+            entity_counts.columns = ['Entity Name', 'Count']
+            st.dataframe(
+                entity_counts, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Entity Name": st.column_config.TextColumn("Affected Entity"),
+                    "Count": st.column_config.NumberColumn("Alerts", format="%d")
+                }
+            )
+
+    st.divider()
+
+    # --- LOGS SECTION ---
+    st.subheader(f"📝 Live Alert Logs {title_suffix}")
+    common_config = {
+        "start_time": st.column_config.DatetimeColumn("Time (UTC)", format="D MMM, HH:mm"),
+        "Entity": st.column_config.TextColumn("Entity", width="medium"),
+        "conditionName": st.column_config.TextColumn("Condition", width="large"),
+        "Status": st.column_config.TextColumn("State", width="small"),
+        "Duration": st.column_config.TextColumn("Duration", width="small"),
+    }
+    cols = ['start_time', 'Customer', 'Entity', 'conditionName', 'priority', 'Status', 'Duration']
+
+    tab1, tab2 = st.tabs(["🏗️ **Infrastructure**", "🛡️ **SOC**"])
+    
+    with tab1:
+        infra_df = df_drilldown[df_drilldown['Category'] == 'Infra']
+        if not infra_df.empty:
+            st.dataframe(infra_df[cols].style.map(style_status_column, subset=['Status']), use_container_width=True, hide_index=True, column_config=common_config)
+        else:
+            st.info("No Infrastructure alerts recorded.")
+
+    with tab2:
+        soc_df = df_drilldown[df_drilldown['Category'] == 'SOC']
+        if not soc_df.empty:
+            st.dataframe(soc_df[cols].style.map(style_status_column, subset=['Status']), use_container_width=True, hide_index=True, column_config=common_config)
+        else:
+            st.info("No SOC alerts recorded.")
