@@ -6,7 +6,7 @@ import altair as alt
 from PIL import Image
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Quickplay Stability", layout="wide", page_icon="🔥", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Quickplay Stability", layout="wide", page_icon="🔥")
 
 # --- CUSTOM CSS (FINAL CLEAN UI & THEME) ---
 st.markdown("""
@@ -22,15 +22,15 @@ st.markdown("""
         visibility: hidden !important;
     }
     
+    /* HIDE SIDEBAR COLLAPSE BUTTON COMPLETELY */
+    button[kind="header"] {
+        display: none !important;
+    }
+    
     /* SIDEBAR STYLING - REVERTED TO DARK BACKGROUND */
     section[data-testid="stSidebar"] {
         background-color: #161B22; 
         border-right: 1px solid #30363D;
-    }
-    
-    /* Show the sidebar toggle button */
-    button[kind="header"] {
-        visibility: visible !important;
     }
     
     /* METRIC CARDS */
