@@ -371,14 +371,3 @@ for cond, cnt in df_view["conditionName"].value_counts().items():
         st.dataframe(entity_df, use_container_width=True, hide_index=True)
 
 st.divider()
-
-# ---------------- LIVE LOGS ----------------
-st.markdown("### 📝 Live Alert Logs")
-
-cols = ["start_time", "Customer", "Entity", "conditionName", "priority", "Status", "Duration"]
-
-st.dataframe(
-    df_view[cols].style.map(style_status, subset=["Status"]),
-    use_container_width=True,
-    hide_index=True
-)
