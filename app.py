@@ -48,7 +48,7 @@ if "updated" not in st.session_state:
 if "clicked_customer" not in st.session_state:
     st.session_state.clicked_customer = None
 
-# ---------------- SIDEBAR (AUTO) ----------------
+# ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("### Filters")
 
@@ -75,7 +75,7 @@ with st.sidebar:
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
-# Reset click selection when dropdown changes
+# Reset clicked bar if dropdown is not All Customers
 if customer != "All Customers":
     st.session_state.clicked_customer = None
 
@@ -89,7 +89,11 @@ def format_duration(td):
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
 def style_status(v):
-    return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
+    return (
+        "color:#FF5C5C;font-weight:600"
+        if v == "Active"
+        else "color:#6EE7B7;font-weight:600"
+    )
 
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
@@ -157,7 +161,7 @@ else:
 
 # ---------------- HEADER ----------------
 st.markdown("## 🔥 Quickplay Alerts")
-st.caption("Click a customer to drill down")
+st.caption("Click a customer to drill down (highlighted)")
 st.divider()
 
 df = st.session_state.alerts
@@ -165,7 +169,7 @@ if df.empty:
     st.success("No alerts found 🎉")
     st.stop()
 
-# ---------------- CUSTOMER DRILLDOWN ----------------
+# ---------------- APPLY CLICK FILTER ----------------
 df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
@@ -181,11 +185,14 @@ c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
 
 st.divider()
 
-# ---------------- CUSTOMER CHART (CLICKABLE) ----------------
+# ---------------- CUSTOMER CHART (HIGHLIGHT + FADE) ----------------
 if customer == "All Customers":
     st.markdown("### Alerts by Customer (click to filter)")
 
-    selection = alt.selection_point(encodings=["x"], name="select_customer")
+    selection = alt.selection_point(
+        name="select_customer",
+        encodings=["x"]
+    )
 
     cust_chart = (
         alt.Chart(df)
@@ -194,13 +201,26 @@ if customer == "All Customers":
             x=alt.X("Customer", sort="-y"),
             y="count()",
             tooltip=["Customer", "count()"],
-            color=alt.condition(selection, alt.value("#FF9F1C"), alt.value("#444"))
+            color=alt.condition(
+                selection,
+                alt.value("#FF9F1C"),
+                alt.value("#555555")
+            ),
+            opacity=alt.condition(
+                selection,
+                alt.value(1.0),
+                alt.value(0.25)
+            )
         )
         .add_params(selection)
         .properties(height=260)
     )
 
-    event = st.altair_chart(cust_chart, use_container_width=True, on_select="rerun")
+    event = st.altair_chart(
+        cust_chart,
+        use_container_width=True,
+        on_select="rerun"
+    )
 
     if event.selection and "select_customer" in event.selection:
         sel = event.selection["select_customer"]
@@ -237,7 +257,15 @@ st.divider()
 # ---------------- LIVE LOGS ----------------
 st.markdown("### 📝 Live Alert Logs")
 
-cols = ["start_time", "Customer", "Entity", "conditionName", "priority", "Status", "Duration"]
+cols = [
+    "start_time",
+    "Customer",
+    "Entity",
+    "conditionName",
+    "priority",
+    "Status",
+    "Duration",
+]
 
 st.dataframe(
     df_view[cols].style.map(style_status, subset=["Status"]),
