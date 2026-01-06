@@ -11,32 +11,28 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- SIMPLE CLEAN UI ----------------
+# ---------------- CLEAN UI ----------------
 st.markdown("""
 <style>
-.stApp {
-    background-color: #0F1115;
-    color: #E6E6E6;
-}
-#MainMenu, footer, header { visibility: hidden; }
+.stApp { background-color:#0F1115; color:#E6E6E6; }
+#MainMenu, footer, header { visibility:hidden; }
 
 section[data-testid="stSidebar"] {
-    background-color: #151821;
-    border-right: 1px solid #2A2F3A;
+    background-color:#151821;
+    border-right:1px solid #2A2F3A;
 }
 
 div[data-testid="stMetric"] {
-    background-color: #151821;
-    border: 1px solid #2A2F3A;
-    border-radius: 10px;
-    padding: 16px;
+    background-color:#151821;
+    border:1px solid #2A2F3A;
+    border-radius:10px;
+    padding:16px;
 }
 
 .stDataFrame {
-    border: 1px solid #2A2F3A;
-    border-radius: 8px;
+    border:1px solid #2A2F3A;
+    border-radius:8px;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -49,22 +45,23 @@ if "alerts" not in st.session_state:
     st.session_state.alerts = None
 if "updated" not in st.session_state:
     st.session_state.updated = None
+if "clicked_customer" not in st.session_state:
+    st.session_state.clicked_customer = None
 
-# ---------------- SIDEBAR (AUTO-REACTIVE) ----------------
+# ---------------- SIDEBAR (AUTO) ----------------
 with st.sidebar:
     st.markdown("### Filters")
 
     customer = st.selectbox(
         "Customer",
         ["All Customers"] + list(CLIENTS.keys()),
-        key="customer"
+        key="customer_filter"
     )
 
     status_filter = st.radio(
         "Status",
         ["All", "Active", "Closed"],
-        horizontal=True,
-        key="status"
+        horizontal=True
     )
 
     time_map = {
@@ -72,17 +69,15 @@ with st.sidebar:
         "Last 24 Hours": "SINCE 24 hours ago",
         "Last 7 Days": "SINCE 7 days ago"
     }
-
-    time_label = st.selectbox(
-        "Time Range",
-        list(time_map.keys()),
-        key="time_range"
-    )
+    time_label = st.selectbox("Time Range", list(time_map.keys()))
+    time_clause = time_map[time_label]
 
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
-time_clause = time_map[st.session_state.time_range]
+# Reset click selection when dropdown changes
+if customer != "All Customers":
+    st.session_state.clicked_customer = None
 
 # ---------------- HELPERS ----------------
 def format_duration(td):
@@ -94,11 +89,7 @@ def format_duration(td):
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
 def style_status(v):
-    return (
-        "color:#FF5C5C;font-weight:600"
-        if v == "Active"
-        else "color:#6EE7B7;font-weight:600"
-    )
+    return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
 
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
@@ -124,7 +115,7 @@ def fetch_account(name, api_key, account_id, time_clause):
         df.rename(columns={"entity.name": "Entity"}, inplace=True)
     return df
 
-# ---------------- DATA LOAD (AUTO TRIGGERED) ----------------
+# ---------------- LOAD DATA ----------------
 all_rows = []
 targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
 
@@ -146,16 +137,12 @@ if all_rows:
         events=("event", "nunique")
     ).reset_index()
 
-    grouped["Status"] = grouped["events"].apply(
-        lambda x: "Active" if x == 1 else "Closed"
-    )
+    grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
 
     now = datetime.datetime.utcnow()
     grouped["Duration"] = grouped.apply(
         lambda r: format_duration(
-            (now - r.start_time)
-            if r.Status == "Active"
-            else (r.end_time - r.start_time)
+            (now - r.start_time) if r.Status == "Active" else (r.end_time - r.start_time)
         ),
         axis=1
     )
@@ -170,7 +157,7 @@ else:
 
 # ---------------- HEADER ----------------
 st.markdown("## 🔥 Quickplay Alerts")
-st.caption("Auto-refreshing alert overview with entity-level visibility")
+st.caption("Click a customer to drill down")
 st.divider()
 
 df = st.session_state.alerts
@@ -178,69 +165,82 @@ if df.empty:
     st.success("No alerts found 🎉")
     st.stop()
 
+# ---------------- CUSTOMER DRILLDOWN ----------------
+df_view = df
+if st.session_state.clicked_customer:
+    df_view = df[df["Customer"] == st.session_state.clicked_customer]
+    st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
+    if st.button("🔄 Reset to All Customers"):
+        st.session_state.clicked_customer = None
+        st.experimental_rerun()
+
 # ---------------- KPIs ----------------
 c1, c2 = st.columns(2)
-c1.metric("Total Alerts", len(df))
-c2.metric("Active Alerts", len(df[df["Status"] == "Active"]))
+c1.metric("Total Alerts", len(df_view))
+c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
 
 st.divider()
 
-# ---------------- CHARTS ----------------
+# ---------------- CUSTOMER CHART (CLICKABLE) ----------------
 if customer == "All Customers":
-    st.markdown("### Alerts by Customer")
-    cust_chart = alt.Chart(df).mark_bar().encode(
-        x=alt.X("Customer", sort="-y"),
-        y="count()",
-        tooltip=["Customer", "count()"],
-        color=alt.value("#FF9F1C")
-    ).properties(height=260)
-    st.altair_chart(cust_chart, use_container_width=True)
+    st.markdown("### Alerts by Customer (click to filter)")
 
+    selection = alt.selection_point(encodings=["x"], name="select_customer")
+
+    cust_chart = (
+        alt.Chart(df)
+        .mark_bar()
+        .encode(
+            x=alt.X("Customer", sort="-y"),
+            y="count()",
+            tooltip=["Customer", "count()"],
+            color=alt.condition(selection, alt.value("#FF9F1C"), alt.value("#444"))
+        )
+        .add_params(selection)
+        .properties(height=260)
+    )
+
+    event = st.altair_chart(cust_chart, use_container_width=True, on_select="rerun")
+
+    if event.selection and "select_customer" in event.selection:
+        sel = event.selection["select_customer"]
+        if sel and "Customer" in sel[0]:
+            st.session_state.clicked_customer = sel[0]["Customer"]
+            st.experimental_rerun()
+
+# ---------------- CONDITION CHART ----------------
 st.markdown("### Alerts by Condition")
-cond_chart = alt.Chart(df).mark_bar().encode(
+
+cond_chart = alt.Chart(df_view).mark_bar().encode(
     x=alt.X("conditionName", sort="-y", axis=alt.Axis(labelAngle=-40)),
     y="count()",
     tooltip=["conditionName", "count()"],
     color=alt.value("#FF9F1C")
 ).properties(height=300)
+
 st.altair_chart(cond_chart, use_container_width=True)
 
 st.divider()
 
-# ---------------- ENTITY BREAKDOWN (UNCHANGED) ----------------
+# ---------------- ENTITY BREAKDOWN ----------------
 st.markdown("### 🔎 Alert Breakdown by Entity")
-st.caption("Click a condition to see impacted entities")
 
-for condition, count in df["conditionName"].value_counts().items():
-    with st.expander(f"⚠️ {condition} ({count})"):
-        subset = df[df["conditionName"] == condition]
-        entity_counts = subset["Entity"].value_counts().reset_index()
-        entity_counts.columns = ["Entity", "Alerts"]
-        st.dataframe(entity_counts, use_container_width=True, hide_index=True)
+for cond, cnt in df_view["conditionName"].value_counts().items():
+    with st.expander(f"⚠️ {cond} ({cnt})"):
+        subset = df_view[df_view["conditionName"] == cond]
+        entity_df = subset["Entity"].value_counts().reset_index()
+        entity_df.columns = ["Entity", "Alerts"]
+        st.dataframe(entity_df, use_container_width=True, hide_index=True)
 
 st.divider()
 
 # ---------------- LIVE LOGS ----------------
 st.markdown("### 📝 Live Alert Logs")
 
-cols = [
-    "start_time",
-    "Customer",
-    "Entity",
-    "conditionName",
-    "priority",
-    "Status",
-    "Duration",
-]
+cols = ["start_time", "Customer", "Entity", "conditionName", "priority", "Status", "Duration"]
 
 st.dataframe(
-    df[cols].style.map(style_status, subset=["Status"]),
+    df_view[cols].style.map(style_status, subset=["Status"]),
     use_container_width=True,
-    hide_index=True,
-    column_config={
-        "start_time": st.column_config.DatetimeColumn("Start Time (UTC)"),
-        "conditionName": st.column_config.TextColumn("Condition"),
-        "priority": st.column_config.TextColumn("Priority"),
-        "Entity": st.column_config.TextColumn("Entity"),
-    },
+    hide_index=True
 )
