@@ -40,20 +40,6 @@ div[data-testid="stMetric"] {
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
 
-# Mapping of customer names to logo file paths
-CUSTOMER_LOGOS = {
-    "Aha": "logos/aha.png",
-    "canela": "logos/canela.png",
-    "pLive": "logos/plive.png",
-    "cignal": "logos/cignal.png",
-    "Tm": "logos/tm.png",
-    "gotham sports": "logos/gotham_sports.png",
-    "game": "logos/gotham_sports.png",
-    "univision": "logos/univision.png",
-    "local now": "logos/local_now.png",
-    "amd": "logos/local_now.png"
-}
-
 # ---------------- SESSION STATE ----------------
 if "alerts" not in st.session_state:
     st.session_state.alerts = None
@@ -84,6 +70,20 @@ with st.sidebar:
 
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
+
+# Mapping of customer names to logo file paths
+CUSTOMER_LOGOS = {
+    "Aha": "logos/aha.png",
+    "canela": "logos/canela.png",
+    "pLive": "logos/plive.png",
+    "cignal": "logos/cignal.png",
+    "Tm": "logos/tm.png",
+    "gotham sports": "logos/gotham_sports.png",
+    "game": "logos/gotham_sports.png",
+    "univision": "logos/univision.png",
+    "local now": "logos/local_now.png",
+    "amd": "logos/local_now.png"
+}
 
 # ---------------- HELPERS ----------------
 def format_duration(td):
@@ -408,6 +408,8 @@ for rec in metrics["recommendations"]:
 
 st.divider()
 
+st.divider()
+
 # ---------------- CUSTOMER CHART - CARDS VIEW ----------------
 if customer == "All Customers":
     st.markdown("### Alerts by Customer")
@@ -422,68 +424,33 @@ if customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                # Get logo path for customer
-                logo_path = CUSTOMER_LOGOS.get(cust_name)
+                # Get logo URL for customer
+                logo_url = CUSTOMER_LOGOS.get(cust_name, "https://via.placeholder.com/150/FF9F1C/FFFFFF?text=Logo")
                 
-                if logo_path:
-                    # Card with logo as background
-                    card_html = f"""
-                    <div style="
-                        background-image: url('{logo_path}');
-                        background-size: cover;
-                        background-position: center;
-                        border-radius: 12px;
-                        padding: 20px;
-                        text-align: center;
-                        cursor: pointer;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                        position: relative;
-                        min-height: 200px;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: flex-start;
-                        align-items: center;
-                        overflow: hidden;
-                    ">
-                        <div style="
-                            background: rgba(0, 0, 0, 0.5);
-                            backdrop-filter: blur(4px);
-                            border-radius: 8px;
-                            padding: 12px 20px;
-                            color: white;
-                            font-size: 28px;
-                            font-weight: bold;
-                            margin-top: 10px;
-                            min-width: 80px;
-                        ">
-                            {count}
-                        </div>
-                    </div>
-                    """
-                    st.markdown(card_html, unsafe_allow_html=True)
-                else:
-                    # Fallback if no logo
-                    card_html = f"""
-                    <div style="
-                        background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
-                        border-radius: 12px;
-                        padding: 20px;
-                        text-align: center;
-                        cursor: pointer;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                        color: white;
-                        min-height: 200px;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        align-items: center;
-                    ">
-                        <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">{cust_name}</div>
-                        <div style="font-size: 32px; font-weight: bold;">{count}</div>
-                        <div style="font-size: 12px; margin-top: 8px; opacity: 0.9;">Alerts</div>
-                    </div>
-                    """
-                    st.markdown(card_html, unsafe_allow_html=True)
+                # Card styling with logo
+                card_html = f"""
+                <div style="
+                    background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
+                    border-radius: 12px;
+                    padding: 20px;
+                    text-align: center;
+                    cursor: pointer;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    transition: transform 0.2s;
+                    color: white;
+                    min-height: 200px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                ">
+                    <img src="{logo_url}" style="height: 60px; margin-bottom: 15px; object-fit: contain;">
+                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">{cust_name}</div>
+                    <div style="font-size: 32px; font-weight: bold;">{count}</div>
+                    <div style="font-size: 12px; margin-top: 8px; opacity: 0.9;">Alerts</div>
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
                 
                 # Button to drill down
                 if st.button(f"View {cust_name}", key=f"btn_{cust_name}"):
