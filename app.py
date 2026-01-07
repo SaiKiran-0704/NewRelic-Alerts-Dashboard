@@ -50,18 +50,18 @@ div[data-testid="stMetric"] {
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
 
-# Mapping of customer names to logo filenames
-CUSTOMER_LOGOS = {
-    "Aha": "Aha.png",
-    "canela": "canela.png",
-    "pLive": "plive.png",
-    "cignal": "cignal.jpeg",
-    "Tm": "tm.jpeg",
-    "gotham sports": "gotham_sports.jpeg",
-    "game": "gotham_sports.jpeg",
-    "univision": "unow.jpeg",
-    "local now": "localnow.png",
-    "amd": "localnow.png"
+# Mapping of customer names
+CUSTOMER_NAMES = {
+    "Aha": "Aha",
+    "canela": "Canela",
+    "pLive": "pLive",
+    "cignal": "Cignal",
+    "Tm": "TM",
+    "gotham sports": "Gotham Sports",
+    "game": "Game",
+    "univision": "Univision",
+    "local now": "Local Now",
+    "amd": "AMD"
 }
 
 # ---------------- SESSION STATE ----------------
