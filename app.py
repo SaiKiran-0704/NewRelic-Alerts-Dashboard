@@ -58,26 +58,32 @@ if st.session_state.navigate_to_customer:
     st.session_state.navigate_to_customer = None
 
 # ---------------- HELPERS ----------------
-def get_avg_alerts(df, time_label):
-    if df.empty: return "0", "N/A"
+def get_dynamic_avg(df, time_label):
+    if df.empty: return "0", "Avg. Alerts"
     total_alerts = len(df)
     
-    # Map time window to numeric values and labels
     if "Hours" in time_label:
+        # e.g., "6 Hours" -> units = 6
         units = int(time_label.split()[0])
-        label = "Hour"
-    elif "Days" in time_label:
-        units = int(time_label.split()[0])
-        label = "Day"
-    elif "30 Days" in time_label: # Handling the month view
-        units = 4
-        label = "Week"
-    else:
-        units = 1
-        label = "Period"
+        avg = total_alerts / units
+        return f"{avg:.1f}", "Avg. Alerts / Hour"
         
-    avg = total_alerts / units
-    return f"{avg:.1f}", f"per {label}"
+    elif "24 Hours" in time_label:
+        avg = total_alerts / 24
+        return f"{avg:.1f}", "Avg. Alerts / Hour"
+        
+    elif "7 Days" in time_label:
+        units = 7
+        avg = total_alerts / units
+        return f"{avg:.1f}", "Avg. Alerts / Day"
+        
+    elif "30 Days" in time_label:
+        # Month view: calculate per week (approx 4 weeks)
+        units = 4 
+        avg = total_alerts / units
+        return f"{avg:.1f}", "Avg. Alerts / Week"
+    
+    return f"{total_alerts}", "Total Alerts"
 
 def get_resolution_rate(df):
     if df.empty: return "0%"
@@ -106,7 +112,7 @@ def fetch_account(name, api_key, account_id, time_clause):
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v1.7")
+    st.caption("Pulse Monitoring v1.8")
     st.divider()
     
     customer_selection = st.selectbox(
@@ -169,16 +175,16 @@ st.markdown(f"**Viewing:** `{customer_selection}` | **Range:** `{time_label}`")
 df = st.session_state.alerts
 
 # ---------------- DYNAMIC KPI ROW ----------------
-avg_val, avg_label = get_avg_alerts(df, time_label)
+avg_value, card_title = get_dynamic_avg(df, time_label)
 
 if status_choice in ["Active", "Closed"]:
     c1, c2 = st.columns(2)
     c1.metric(f"{status_choice} Alerts", len(df))
-    c2.metric(f"Avg. {status_choice} Alerts", avg_val, avg_label)
+    c2.metric(card_title, avg_value)
 else:
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Alerts", len(df))
-    c2.metric("Avg. Alert Frequency", avg_val, avg_label)
+    c2.metric(card_title, avg_value)
     c3.metric("Resolution Rate", get_resolution_rate(df))
 
 st.divider()
