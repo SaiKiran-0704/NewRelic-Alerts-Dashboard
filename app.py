@@ -10,51 +10,124 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- CLEAN UI STYLING ----------------
+# ---------------- CLEAN & BRANDED UI ----------------
 st.markdown("""
 <style>
+    /* Dark Theme with Quickplay Accents */
     .stApp { background-color:#0F1115; color:#E6E6E6; }
-    .main-header { color: #F37021; font-weight: 800; margin-bottom: 0px; }
-    .block-container { padding-top: 2rem; }
     
-    /* KPI Card Style */
+    /* Header Styling */
+    .main-header {
+        color: #F37021; /* Quickplay Orange */
+        font-weight: 800;
+        margin-bottom: 0px;
+    }
+    
+    /* Remove unnecessary spacing at top */
+    .block-container { padding-top: 2rem; }
+
+    /* KPI Card Refinement */
     div[data-testid="stMetric"] {
         background-color:#161B22;
         border: 1px solid #30363D;
         border-radius: 10px;
         padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     
-    /* Sidebar Style */
+    /* Highlight Active Metric */
+    div[data-testid="stMetric"]:nth-child(2) {
+        border-top: 3px solid #F37021;
+    }
+
+    /* Modern Table/Dataframe */
+    .stDataFrame {
+        border: 1px solid #30363D;
+        border-radius: 8px;
+    }
+
+    /* Sidebar glassmorphism */
     section[data-testid="stSidebar"] {
         background-color:#151821;
         border-right:1px solid #2A2F3A;
     }
-
-    /* Condition Group Headers */
-    .stExpander {
-        border: 1px solid #30363D !important;
-        background-color: #111418 !important;
-        margin-bottom: 10px;
+    
+    /* Button Grid for Customers */
+    .stButton>button {
+        background-color: #1C2128;
+        border: 1px solid #30363D;
+        color: white;
+        transition: 0.3s;
+    }
+    .stButton>button:hover {
+        border-color: #F37021;
+        color: #F37021;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- CONFIG & DATA ----------------
+# ---------------- CONFIG & DATA LOGIC (UNCHANGED) ----------------
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
 
 if "alerts" not in st.session_state: st.session_state.alerts = None
 if "updated" not in st.session_state: st.session_state.updated = None
 if "customer_filter" not in st.session_state: st.session_state.customer_filter = "All Customers"
+if "navigate_to_customer" not in st.session_state: st.session_state.navigate_to_customer = None
 
-# ---------------- HELPERS ----------------
+if st.session_state.navigate_to_customer:
+    st.session_state.customer_filter = st.session_state.navigate_to_customer
+    st.session_state.navigate_to_customer = None
+
+# ---------------- SIDEBAR ----------------
+with st.sidebar:
+    st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
+    st.caption("Pulse Monitoring v1.0")
+    st.divider()
+    
+    customer = st.selectbox(
+        "Client Selector",
+        ["All Customers"] + list(CLIENTS.keys()),
+        key="customer_filter"
+    )
+
+    time_map = {
+        "6 Hours": "SINCE 6 hours ago",
+        "24 Hours": "SINCE 24 hours ago",
+        "7 Days": "SINCE 7 days ago",
+        "30 Days": "SINCE 30 days ago"
+    }
+    time_label = st.selectbox("Time Window", list(time_map.keys()))
+    time_clause = time_map[time_label]
+
+    if st.session_state.updated:
+        st.markdown(f"**Last Sync:** `{st.session_state.updated}`")
+
+# ---------------- HELPERS (YOUR ORIGINAL LOGIC) ----------------
 def format_duration(td):
     s = int(td.total_seconds())
     if s < 60: return f"{s}s"
     m, s = divmod(s, 60)
     h, m = divmod(m, 60)
     return f"{h}h {m}m" if h else f"{m}m {s}s"
+
+def calculate_mttr(df):
+    closed = df[df["Status"] == "Closed"]
+    if closed.empty: return "N/A"
+    mins = []
+    for d in closed["Duration"]:
+        total = 0
+        parts = d.split()
+        for p in parts:
+            if "h" in p: total += int(p.replace("h","")) * 60
+            elif "m" in p: total += int(p.replace("m",""))
+        mins.append(total)
+    avg = sum(mins) / len(mins)
+    return f"{int(avg//60)}h {int(avg%60)}m" if avg >= 60 else f"{int(avg)}m"
+
+def get_resolution_rate(df):
+    if df.empty: return "0%"
+    return f"{(len(df[df.Status=='Closed'])/len(df))*100:.0f}%"
 
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
@@ -76,21 +149,14 @@ def fetch_account(name, api_key, account_id, time_clause):
     except:
         return pd.DataFrame()
 
-# ---------------- SIDEBAR ----------------
-with st.sidebar:
-    st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    customer = st.selectbox("Client Selector", ["All Customers"] + list(CLIENTS.keys()), key="customer_filter")
-    time_map = {"6h": "SINCE 6h ago", "24h": "SINCE 24h ago", "7d": "SINCE 7d ago"}
-    time_label = st.selectbox("Time Window", list(time_map.keys()))
-    time_clause = time_map[time_label]
-
-# ---------------- DATA FETCH & PROCESS ----------------
+# ---------------- LOAD DATA ----------------
 all_rows = []
 targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
 
-for name, cfg in targets:
-    df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
-    if not df_res.empty: all_rows.append(df_res)
+with st.spinner("Fetching data..."):
+    for name, cfg in targets:
+        df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
+        if not df_res.empty: all_rows.append(df_res)
 
 if all_rows:
     raw = pd.concat(all_rows)
@@ -108,44 +174,46 @@ if all_rows:
 else:
     st.session_state.alerts = pd.DataFrame()
 
-# ---------------- MAIN DASHBOARD ----------------
-st.markdown("<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
+# ---------------- MAIN CONTENT ----------------
+st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
+st.markdown(f"**Viewing:** `{customer}` | **Range:** `{time_label}`")
+
 df = st.session_state.alerts
+if df.empty:
+    st.success("All systems operational. No alerts found. 🎉")
+    st.stop()
 
-if df is not None and not df.empty:
-    # KPI Row
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Volume", len(df))
-    active_df = df[df.Status == "Active"]
-    c2.metric("Active Now", len(active_df), delta=len(active_df), delta_color="inverse")
-    c3.metric("Unique Conditions", df["conditionName"].nunique())
+# ---------------- INSIGHTS KPI ROW ----------------
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Total Alerts", len(df))
+c2.metric("Active Alerts", len(df[df.Status == "Active"]))
+c3.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
+c4.metric("Resolution Rate", get_resolution_rate(df))
 
+st.divider()
+
+# ---------------- CUSTOMER TILES ----------------
+if customer == "All Customers":
+    st.subheader("Client Health Overview")
+    counts = df["Customer"].value_counts()
+    cols = st.columns(4)
+    for i, (cust, cnt) in enumerate(counts.items()):
+        with cols[i % 4]:
+            if st.button(f"{cust}\n\n{cnt} Alerts", key=f"c_{cust}", use_container_width=True):
+                st.session_state.navigate_to_customer = cust
+                st.rerun()
     st.divider()
 
-    # ---------------- ENTITY CONDITION GROUPS ----------------
-    st.subheader("📋 Alerts by Condition Group")
-    
-    # Sort conditions by number of alerts (noisiest first)
-    condition_counts = df["conditionName"].value_counts()
-    
-    for condition, count in condition_counts.items():
-        # Filter data for this specific condition
-        condition_df = df[df["conditionName"] == condition]
-        
-        # Color coding for the header
-        has_active = "Active" in condition_df["Status"].values
-        header_label = f"🔴 {condition} ({count})" if has_active else f"🟢 {condition} ({count})"
-        
-        with st.expander(header_label):
-            # Displaying the specific entities impacted by this condition
-            display_df = condition_df[["Status", "Customer", "Entity", "Duration", "start_time"]]
-            st.dataframe(
-                display_df.sort_values("Status"), 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "start_time": st.column_config.DatetimeColumn("Detected At", format="D MMM, HH:mm"),
-                }
-            )
-else:
-    st.success("No alerts found in this time range.")
+# ---------------- DETAILED LOG ----------------
+st.subheader("📋 Recent Incidents")
+# We filter the columns to keep it clean and simple
+display_df = df[["Status", "Customer", "conditionName", "Entity", "Duration", "start_time"]]
+st.dataframe(
+    display_df, 
+    use_container_width=True, 
+    hide_index=True,
+    column_config={
+        "start_time": st.column_config.DatetimeColumn("Detected At", format="D MMM, HH:mm"),
+        "Status": st.column_config.TextColumn("Status"),
+    }
+)
