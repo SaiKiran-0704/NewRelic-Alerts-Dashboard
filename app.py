@@ -320,9 +320,19 @@ st.divider()
 col1, col2 = st.columns(2)
 
 with col1:
+    # Set the default index based on clicked customer
+    customer_options = ["All Customers"] + list(CLIENTS.keys())
+    default_index = 0
+    if st.session_state.clicked_customer:
+        try:
+            default_index = customer_options.index(st.session_state.clicked_customer)
+        except ValueError:
+            default_index = 0
+    
     customer = st.selectbox(
         "Select Customer",
-        ["All Customers"] + list(CLIENTS.keys()),
+        customer_options,
+        index=default_index,
         key="customer_filter_main"
     )
 
