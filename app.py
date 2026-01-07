@@ -1,9 +1,10 @@
-import streamlit as st
+\import streamlit as st
 import requests
 import pandas as pd
 import datetime
+import altair as alt
 
-# ---- PAGE CONFIG ----
+# ---- MUST BE FIRST ----
 st.set_page_config(
     page_title="Quickplay Alerts",
     layout="wide",
@@ -44,18 +45,17 @@ if "alerts" not in st.session_state:
     st.session_state.alerts = None
 if "updated" not in st.session_state:
     st.session_state.updated = None
-if "selected_customer" not in st.session_state:
-    st.session_state.selected_customer = "All Customers"
+if "clicked_customer" not in st.session_state:
+    st.session_state.clicked_customer = None
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("### Filters")
 
-    customer_options = ["All Customers"] + list(CLIENTS.keys())
-    sidebar_customer = st.selectbox(
+    customer = st.selectbox(
         "Customer",
-        customer_options,
-        index=customer_options.index(st.session_state.selected_customer)
+        ["All Customers"] + list(CLIENTS.keys()),
+        key="customer_filter"
     )
 
     time_map = {
@@ -71,8 +71,9 @@ with st.sidebar:
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
-# Update session state based on sidebar selection
-st.session_state.selected_customer = sidebar_customer
+# Reset click selection when dropdown changes
+if customer != "All Customers":
+    st.session_state.clicked_customer = None
 
 # ---------------- HELPERS ----------------
 def format_duration(td):
@@ -83,83 +84,117 @@ def format_duration(td):
     h, m = divmod(m, 60)
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
+def style_status(v):
+    return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
+
 def calculate_mttr(df):
     if df.empty:
         return "N/A"
-    closed = df[df["Status"] == "Closed"]
-    if len(closed) == 0:
+    closed_alerts = df[df["Status"] == "Closed"]
+    if len(closed_alerts) == 0:
         return "No resolved alerts yet"
     durations = []
-    for d in closed["Duration"]:
+    for duration_str in closed_alerts["Duration"]:
         try:
-            mins = 0
-            for part in d.split():
-                if 'd' in part: mins += int(part.replace('d',''))*1440
-                elif 'h' in part: mins += int(part.replace('h',''))*60
-                elif 'm' in part: mins += int(part.replace('m',''))
-                elif 's' in part: mins += int(part.replace('s',''))/60
-            durations.append(mins)
-        except: pass
+            total_minutes = 0
+            parts = duration_str.split()
+            for part in parts:
+                if 'd' in part:
+                    total_minutes += int(part.replace('d','')) * 1440
+                elif 'h' in part:
+                    total_minutes += int(part.replace('h','')) * 60
+                elif 'm' in part:
+                    total_minutes += int(part.replace('m',''))
+                elif 's' in part:
+                    total_minutes += int(part.replace('s','')) / 60
+            durations.append(total_minutes)
+        except:
+            pass
     if durations:
-        avg = sum(durations)/len(durations)
-        h = int(avg//60)
-        m = int(avg%60)
-        return f"{h}h {m}m" if h>0 else f"{m}m"
+        avg_minutes = sum(durations) / len(durations)
+        hours = int(avg_minutes // 60)
+        minutes = int(avg_minutes % 60)
+        return f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
     return "N/A"
 
 def get_alert_frequency(df, time_label):
-    if df.empty: return "N/A"
-    total = len(df)
-    if "6 Hours" in time_label: return f"{total/6:.1f} per hour"
-    if "24 Hours" in time_label: return f"{total/24:.1f} per hour"
-    if "7 Days" in time_label: return f"{total/7:.1f} per day"
-    if "1 Month" in time_label: return f"{total/30:.1f} per day"
-    if "3 Months" in time_label: return f"{total/90:.1f} per day"
-    return f"{total} total"
+    if df.empty:
+        return "N/A"
+    total_alerts = len(df)
+    if "6 Hours" in time_label:
+        freq = total_alerts / 6
+        return f"{freq:.1f} per hour"
+    elif "24 Hours" in time_label:
+        freq = total_alerts / 24
+        return f"{freq:.1f} per hour"
+    elif "7 Days" in time_label:
+        freq = total_alerts / 7
+        return f"{freq:.1f} per day"
+    elif "1 Month" in time_label:
+        freq = total_alerts / 30
+        return f"{freq:.1f} per day"
+    elif "3 Months" in time_label:
+        freq = total_alerts / 90
+        return f"{freq:.1f} per day"
+    return f"{total_alerts} total"
 
 def get_resolution_rate(df):
-    if df.empty: return "0%"
+    if df.empty:
+        return "0%"
     total = len(df)
-    resolved = len(df[df["Status"]=="Closed"])
-    return f"{(resolved/total*100):.0f}%"
+    resolved = len(df[df["Status"] == "Closed"])
+    rate = (resolved / total) * 100
+    return f"{rate:.0f}%"
 
 def get_top_3_entities(df):
-    if df.empty or "Entity" not in df.columns: return []
-    top = df["Entity"].value_counts().head(3)
-    return [(e,c) for e,c in top.items()]
+    if df.empty or "Entity" not in df.columns:
+        return []
+    top_entities = df["Entity"].value_counts().head(3)
+    return [(entity, count) for entity, count in top_entities.items()]
 
-def calculate_alert_trend(df):
-    if df.empty: return "N/A"
-    n = len(df)
-    if n>100: return "High volume"
-    if n>50: return "Moderate volume"
-    return "Low volume"
+def calculate_alert_trend(df_current, time_label):
+    if df_current.empty:
+        return "N/A"
+    current_count = len(df_current)
+    if current_count > 100:
+        return "High volume"
+    elif current_count > 50:
+        return "Moderate volume"
+    else:
+        return "Low volume"
 
-def generate_insights(df, time_label):
-    if df.empty: return {
-        "mttr":"N/A","frequency":"N/A","resolution_rate":"0%",
-        "top_entities":[],"trend":"N/A","recommendations":["No alerts"],"top_condition":"N/A"
-    }
+def generate_better_insights(df, time_label):
+    if df.empty:
+        return {
+            "mttr": "N/A",
+            "frequency": "N/A",
+            "resolution_rate": "0%",
+            "top_entities": [],
+            "trend": "N/A",
+            "recommendations": ["No alerts in this period"],
+            "top_condition": "N/A"
+        }
     total = len(df)
-    active = len(df[df["Status"]=="Active"])
+    active = len(df[df["Status"] == "Active"])
     top_condition = "N/A"
     if "conditionName" in df.columns and not df["conditionName"].empty:
         top_condition = df["conditionName"].value_counts().index[0]
-    recs = []
-    if active/total>0.5:
-        recs.append("🎯 High active rate (>50%) - Consider tuning thresholds")
+    recommendations = []
+    if active / total > 0.5:
+        recommendations.append("🎯 High active rate (>50%) - Consider tuning alert thresholds")
     if top_condition != "N/A":
         top_count = df["conditionName"].value_counts().iloc[0]
-        if top_count/total > 0.3:
-            recs.append(f"🎯 '{top_condition}' causes {(top_count/total)*100:.0f}% of alerts - Needs investigation")
-    if not recs: recs.append("✅ Alert conditions look well-tuned")
+        if top_count > total * 0.3:
+            recommendations.append(f"🎯 '{top_condition}' causes {(top_count/total)*100:.0f}% of alerts - Needs investigation")
+    if not recommendations:
+        recommendations.append("✅ Alert conditions look well-tuned")
     return {
         "mttr": calculate_mttr(df),
-        "frequency": get_alert_frequency(df,time_label),
+        "frequency": get_alert_frequency(df, time_label),
         "resolution_rate": get_resolution_rate(df),
         "top_entities": get_top_3_entities(df),
-        "trend": calculate_alert_trend(df),
-        "recommendations": recs,
+        "trend": calculate_alert_trend(df, time_label),
+        "recommendations": recommendations,
         "top_condition": top_condition
     }
 
@@ -168,113 +203,141 @@ def fetch_account(name, api_key, account_id, time_clause):
     query = f"""
     {{
       actor {{
-        account(id:{account_id}) {{
-          nrql(query:"SELECT timestamp, conditionName, priority, incidentId, event, entity.name 
-                        FROM NrAiIncident WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
+        account(id: {account_id}) {{
+          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name FROM NrAiIncident WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
             results
           }}
         }}
       }}
     }}
     """
-    r = requests.post(ENDPOINT,json={"query":query},headers={"API-Key":api_key})
+    r = requests.post(
+        ENDPOINT,
+        json={"query": query},
+        headers={"API-Key": api_key}
+    )
     df = pd.DataFrame(r.json()["data"]["actor"]["account"]["nrql"]["results"])
     if not df.empty:
-        df["Customer"]=name
+        df["Customer"] = name
         df.rename(columns={"entity.name":"Entity"}, inplace=True)
     return df
 
 # ---------------- LOAD DATA ----------------
 all_rows = []
-targets = CLIENTS.items() if st.session_state.selected_customer=="All Customers" else [(st.session_state.selected_customer, CLIENTS[st.session_state.selected_customer])]
+targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
 
 with st.spinner("Loading alerts…"):
-    for name,cfg in targets:
-        df = fetch_account(name,cfg["api_key"],cfg["account_id"],time_clause)
-        if not df.empty: all_rows.append(df)
+    for name, cfg in targets:
+        df = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
+        if not df.empty:
+            all_rows.append(df)
 
 if all_rows:
     raw = pd.concat(all_rows)
-    raw["timestamp"] = pd.to_datetime(raw["timestamp"],unit="ms")
-    grouped = raw.groupby(["incidentId","Customer","conditionName","priority","Entity"]).agg(
+    raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
+    grouped = raw.groupby(
+        ["incidentId","Customer","conditionName","priority","Entity"]
+    ).agg(
         start_time=("timestamp","min"),
         end_time=("timestamp","max"),
         events=("event","nunique")
     ).reset_index()
     grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x==1 else "Closed")
-    now=datetime.datetime.utcnow()
-    grouped["Duration"]=grouped.apply(lambda r: format_duration((now-r.start_time) if r.Status=="Active" else (r.end_time-r.start_time)),axis=1)
-    st.session_state.alerts = grouped.sort_values("start_time",ascending=False)
-    st.session_state.updated=datetime.datetime.now().strftime("%H:%M:%S")
-else: st.session_state.alerts=pd.DataFrame()
-
-df = st.session_state.alerts
+    now = datetime.datetime.utcnow()
+    grouped["Duration"] = grouped.apply(
+        lambda r: format_duration(
+            (now - r.start_time) if r.Status=="Active" else (r.end_time - r.start_time)
+        ), axis=1
+    )
+    st.session_state.alerts = grouped.sort_values("start_time", ascending=False)
+    st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
+else:
+    st.session_state.alerts = pd.DataFrame()
 
 # ---------------- HEADER ----------------
-if st.session_state.selected_customer=="All Customers":
+if customer == "All Customers":
     st.markdown("## 🔥 Quickplay Alerts")
 else:
-    st.markdown(f"## 🔥 Quickplay Alerts — **{st.session_state.selected_customer}**")
+    st.markdown(f"## 🔥 Quickplay Alerts — **{customer}**")
 
 st.divider()
 
+df = st.session_state.alerts
 if df.empty:
     st.success("No alerts found 🎉")
     st.stop()
 
-# ---------------- DRILLDOWN ----------------
-df_view = df if st.session_state.selected_customer=="All Customers" else df[df["Customer"]==st.session_state.selected_customer]
+# ---- CUSTOMER DRILLDOWN ----
+df_view = df
+if st.session_state.clicked_customer:
+    df_view = df[df["Customer"] == st.session_state.clicked_customer]
+    st.markdown(f"### Customer: **{st.session_state.clicked_customer}**")
+    st.divider()
 
 # ---------------- KPIs ----------------
-c1,c2 = st.columns(2)
+c1, c2 = st.columns(2)
 c1.metric("Total Alerts", len(df_view))
 c2.metric("Active Alerts", len(df_view[df_view["Status"]=="Active"]))
+
 st.divider()
 
 # ---------------- SUMMARY & INSIGHTS ----------------
 st.markdown("### 📊 Alert Metrics & Analysis")
-metrics = generate_insights(df_view, time_label)
-col1,col2,col3 = st.columns(3)
+metrics = generate_better_insights(df_view, time_label)
+
+col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("Mean Time to Resolve",metrics["mttr"])
-    st.metric("Alert Frequency",metrics["frequency"])
+    st.metric("Mean Time to Resolve", metrics["mttr"])
+    st.metric("Alert Frequency", metrics["frequency"])
 with col2:
-    st.metric("Resolution Rate",metrics["resolution_rate"])
-    st.metric("Volume Status",metrics["trend"])
+    st.metric("Resolution Rate", metrics["resolution_rate"])
+    st.metric("Volume Status", metrics["trend"])
 with col3:
     st.markdown("**Top Affected Entities:**")
     if metrics["top_entities"]:
-        for e,c in metrics["top_entities"]:
-            st.markdown(f"• {e}: {c} alerts")
+        for entity,count in metrics["top_entities"]:
+            st.markdown(f"• {entity}: {count} alerts")
     else:
         st.markdown("• No entity data available")
+
 st.divider()
 
 st.markdown("**Top Alert Condition:**")
 st.markdown(f"🔔 **{metrics['top_condition']}**" if metrics["top_condition"]!="N/A" else "No conditions detected")
+
 st.markdown("**Recommendations:**")
-for r in metrics["recommendations"]: st.markdown(f"• {r}")
+for rec in metrics["recommendations"]:
+    st.markdown(f"• {rec}")
+
 st.divider()
 
-# ---------------- CARDS ----------------
-if st.session_state.selected_customer=="All Customers":
+# ---- SHOW CARDS AND ANALYTICS WHEN "ALL CUSTOMERS" ----
+if not st.session_state.clicked_customer and customer=="All Customers":
     st.markdown("### Alerts by Customer")
-    counts = df["Customer"].value_counts().sort_values(ascending=False)
-    cols_per_row=3
-    for i in range(0,len(counts),cols_per_row):
-        cols=st.columns(cols_per_row)
-        for j,(cust,count) in enumerate(list(counts.items())[i:i+cols_per_row]):
+    customer_counts = df["Customer"].value_counts().sort_values(ascending=False)
+    cols_per_row = 3
+    for i in range(0,len(customer_counts),cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j,(cust_name,count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                if st.button(f"{count}\nAlerts\n\n{cust}", key=f"card_{cust}", use_container_width=True):
-                    st.session_state.selected_customer=cust
+                if st.button(
+                    f"{count}\nAlerts\n\n{cust_name}",
+                    key=f"card_{cust_name}",
+                    use_container_width=True,
+                    help=f"Click to view {cust_name} details"
+                ):
+                    st.session_state.clicked_customer = cust_name
                     st.rerun()
 
 st.divider()
 
 # ---------------- ENTITY BREAKDOWN ----------------
 st.markdown("### Alert Details by Condition")
-for cond,cnt in df_view["conditionName"].value_counts().items():
+top_conditions = df_view["conditionName"].value_counts()
+for cond,cnt in top_conditions.items():
     with st.expander(f"{cond} ({cnt})"):
         subset = df_view[df_view["conditionName"]==cond]
-        ent_summary = subset.groupby("Entity").size().reset_index(name="Count").sort_values("Count",ascending=False)
-        st.dataframe(ent_summary,use_container_width=True,hide_index=True)
+        entity_summary = subset.groupby("Entity").size().reset_index(name="Count")
+        entity_summary = entity_summary.sort_values("Count", ascending=False)
+        st.dataframe(entity_summary,use_container_width=True,hide_index=True)
+
