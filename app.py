@@ -71,9 +71,19 @@ with st.sidebar:
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
-# Reset click selection when dropdown changes
-if customer != "All Customers":
-    st.session_state.clicked_customer = None
+# Mapping of customer names to image URLs
+CUSTOMER_LOGOS = {
+    "Aha": "https://via.placeholder.com/150/FF7A3F/FFFFFF?text=Aha",
+    "canela": "https://via.placeholder.com/150/DC143C/FFFFFF?text=Canela",
+    "pLive": "https://via.placeholder.com/150/1A1A1A/FFFFFF?text=pLive",
+    "cignal": "https://via.placeholder.com/150/DC143C/FFFFFF?text=Cignal",
+    "Tm": "https://via.placeholder.com/150/0052CC/FFFFFF?text=TM",
+    "gotham sports": "https://via.placeholder.com/150/1A1A1A/FFFFFF?text=GS",
+    "game": "https://via.placeholder.com/150/1A1A1A/FFFFFF?text=GS",
+    "univision": "https://via.placeholder.com/150/FFFFFF/000000?text=Univision",
+    "local now": "https://via.placeholder.com/150/1A3A3A/00FF00?text=LocalNow",
+    "amd": "https://via.placeholder.com/150/1A3A3A/00FF00?text=LocalNow"
+}
 
 # ---------------- HELPERS ----------------
 def format_duration(td):
@@ -400,32 +410,52 @@ st.divider()
 
 st.divider()
 
-# ---------------- CUSTOMER CHART (CLICKABLE) ----------------
+# ---------------- CUSTOMER CHART - CARDS VIEW ----------------
 if customer == "All Customers":
     st.markdown("### Alerts by Customer")
-
-    selection = alt.selection_point(encodings=["x"], name="select_customer")
-
-    cust_chart = (
-        alt.Chart(df)
-        .mark_bar()
-        .encode(
-            x=alt.X("Customer", sort="-y"),
-            y="count()",
-            tooltip=["Customer", "count()"],
-            color=alt.condition(selection, alt.value("#FF9F1C"), alt.value("#444"))
-        )
-        .add_params(selection)
-        .properties(height=260)
-    )
-
-    event = st.altair_chart(cust_chart, use_container_width=True, on_select="rerun")
-
-    if event.selection and "select_customer" in event.selection:
-        sel = event.selection["select_customer"]
-        if sel and "Customer" in sel[0]:
-            st.session_state.clicked_customer = sel[0]["Customer"]
-            st.rerun()
+    
+    customer_counts = df["Customer"].value_counts().sort_values(ascending=False)
+    
+    # Create cards in rows (3 cards per row)
+    cols_per_row = 3
+    
+    for i in range(0, len(customer_counts), cols_per_row):
+        cols = st.columns(cols_per_row)
+        
+        for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
+            with cols[j]:
+                # Get logo URL for customer
+                logo_url = CUSTOMER_LOGOS.get(cust_name, "https://via.placeholder.com/150/FF9F1C/FFFFFF?text=Logo")
+                
+                # Card styling with logo
+                card_html = f"""
+                <div style="
+                    background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
+                    border-radius: 12px;
+                    padding: 20px;
+                    text-align: center;
+                    cursor: pointer;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    transition: transform 0.2s;
+                    color: white;
+                    min-height: 200px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                ">
+                    <img src="{logo_url}" style="height: 60px; margin-bottom: 15px; object-fit: contain;">
+                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">{cust_name}</div>
+                    <div style="font-size: 32px; font-weight: bold;">{count}</div>
+                    <div style="font-size: 12px; margin-top: 8px; opacity: 0.9;">Alerts</div>
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
+                
+                # Button to drill down
+                if st.button(f"View {cust_name}", key=f"btn_{cust_name}"):
+                    st.session_state.clicked_customer = cust_name
+                    st.rerun()
 
 st.divider()
 
