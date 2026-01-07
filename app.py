@@ -177,12 +177,29 @@ def fetch_account(name, api_key, account_id, time_clause):
       }}
     }}
     """
-    r = requests.post(ENDPOINT,json={"query":query},headers={"API-Key":api_key})
-    df = pd.DataFrame(r.json()["data"]["actor"]["account"]["nrql"]["results"])
-    if not df.empty:
-        df["Customer"]=name
-        df.rename(columns={"entity.name":"Entity"}, inplace=True)
-    return df
+    try:
+        r = requests.post(ENDPOINT, json={"query": query}, headers={"API-Key": api_key})
+        resp = r.json()
+
+        # Check if data exists
+        if (
+            "data" in resp and 
+            "actor" in resp["data"] and
+            "account" in resp["data"]["actor"] and
+            "nrql" in resp["data"]["actor"]["account"] and
+            "results" in resp["data"]["actor"]["account"]["nrql"]
+        ):
+            df = pd.DataFrame(resp["data"]["actor"]["account"]["nrql"]["results"])
+            if not df.empty:
+                df["Customer"] = name
+                df.rename(columns={"entity.name":"Entity"}, inplace=True)
+            return df
+        else:
+            st.warning(f"No data returned for {name}")
+            return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error fetching data for {name}: {e}")
+        return pd.DataFrame()
 
 # ---------------- LOAD DATA ----------------
 all_rows = []
