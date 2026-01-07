@@ -193,8 +193,8 @@ conditions = df["conditionName"].value_counts().index
 for condition in conditions:
     cond_df = df[df["conditionName"] == condition]
     
-    # Header for the Condition Name - Simplified
-    with st.expander(f"**{condition}** — {len(cond_df)} Total Alerts"):
+    # Header logic: Removed the word "Total"
+    with st.expander(f"**{condition}** — {len(cond_df)} Alerts"):
         
         # Entity Summary Table
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
@@ -206,7 +206,7 @@ for condition in conditions:
             use_container_width=True,
             column_config={
                 "Entity": st.column_config.TextColumn("Impacted Entity"),
-                "Alert Count": st.column_config.NumberColumn("Total Alerts", format="%d 🚨")
+                "Alert Count": st.column_config.NumberColumn("Alerts", format="%d 🚨")
             }
         )
 
