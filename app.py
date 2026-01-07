@@ -313,7 +313,11 @@ else:
     st.session_state.alerts = pd.DataFrame()
 
 # ---------------- HEADER ----------------
-st.markdown("## 🔥 Quickplay Alerts")
+if customer != "All Customers":
+    st.markdown(f"## 🔥 Quickplay Alerts — **{customer}**")
+else:
+    st.markdown("## 🔥 Quickplay Alerts")
+
 st.divider()
 
 df = st.session_state.alerts
@@ -325,13 +329,7 @@ if df.empty:
 df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
-    
-    col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
-    with col_reset2:
-        if st.button("← Back to All Customers", use_container_width=True, type="primary"):
-            st.session_state.clicked_customer = None
-            st.rerun()
-    
+    st.markdown(f"### Customer: **{st.session_state.clicked_customer}**")
     st.divider()
 
 # ---------------- KPIs ----------------
@@ -401,42 +399,6 @@ if not st.session_state.clicked_customer and customer == "All Customers":
     
     st.divider()
     
-    st.markdown("### 📊 Alert Metrics & Analysis (All Customers)")
-    
-    metrics = generate_better_insights(df_view, time_label)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Mean Time to Resolve", metrics["mttr"])
-        st.metric("Alert Frequency", metrics["frequency"])
-    
-    with col2:
-        st.metric("Resolution Rate", metrics["resolution_rate"])
-        st.metric("Volume Status", metrics["trend"])
-    
-    with col3:
-        st.markdown("**Top Affected Entities:**")
-        if metrics["top_entities"]:
-            for entity, count in metrics["top_entities"]:
-                st.markdown(f"• {entity}: {count} alerts")
-        else:
-            st.markdown("• No entity data available")
-    
-    st.divider()
-    
-    st.markdown("**Top Alert Condition:**")
-    if metrics["top_condition"] != "N/A":
-        st.markdown(f"🔔 **{metrics['top_condition']}**")
-    else:
-        st.markdown("No conditions detected")
-    
-    st.markdown("**Recommendations:**")
-    for rec in metrics["recommendations"]:
-        st.markdown(f"• {rec}")
-    
-    st.divider()
-
 # ---------------- ENTITY BREAKDOWN ----------------
 st.markdown("### Alert Details by Condition")
 
