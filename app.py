@@ -63,14 +63,14 @@ ENDPOINT = "https://api.newrelic.com/graphql"
 
 # ---------------- CUSTOMER IMAGES ----------------
 CUSTOMER_IMAGES = {
-    "Aha": "assets/aha.png",
-    "PLIVE": "assets/plive.png",
-    "CIGNAL": "assets/cignal.png",
-    "TM": "assets/tm.png",
-    "GAME": "assets/game.png",
-    "AMD": "assets/amd.png",
-    "Univision": "assets/univision.png",
-    "CANELA": "assets/canela.png",
+  "Aha": "logos/Aha.png",
+    "PLIVE": "logos/plive.png",
+    "CIGNAL": "logos/cignal.jpeg",
+    "TM": "logos/tm.jpeg",
+    "GAME": "logos/gotham_sports.jpeg",
+    "AMD": "logos/localnow.png",
+    "Univision": "logos/unow.jpeg",
+    "CANELA": "logos/canela.png",
 }
 
 # ---------------- SESSION STATE ----------------
