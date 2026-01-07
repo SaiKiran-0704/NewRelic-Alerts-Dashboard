@@ -10,26 +10,45 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- ADVANCED VISUAL HIERARCHY & BRANDING (CSS) ----------------
+# ---------------- ADVANCED VISUAL BRANDING & SIDEBAR (CSS) ----------------
 st.markdown("""
 <style>
-    .stApp { background-color:#0F1115; color:#E6E6E6; }
+    /* Main App Background */
+    .stApp { background-color:#0A0C10; color:#E6E6E6; }
     
-    /* Quickplay Orange Sidebar */
-    [data-testid="stSidebar"] {
+    /* Increase Sidebar Width and Style */
+    section[data-testid="stSidebar"] {
+        width: 400px !important;
         background-color: #F37021 !important;
+        border-right: 1px solid rgba(0,0,0,0.1);
+    }
+
+    /* Adjust Main Content to accommodate wider sidebar */
+    section.main {
+        margin-left: 50px;
     }
     
-    /* Ensure Sidebar text and labels are readable (Dark on Orange) */
+    /* Sidebar Text & Label Enhancement */
     [data-testid="stSidebar"] .stText, 
     [data-testid="stSidebar"] label, 
     [data-testid="stSidebar"] .stCaption,
     [data-testid="stSidebar"] p {
         color: #0F1115 !important;
-        font-weight: 600 !important;
+        font-size: 1.1rem !important;
+        font-weight: 700 !important;
+        margin-bottom: 8px !important;
     }
 
-    /* Prominent Top Logo/Header Styling */
+    /* Glassmorphism for Sidebar Widgets */
+    [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"],
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
+        background-color: rgba(15, 17, 21, 0.15) !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(15, 17, 21, 0.2) !important;
+        padding: 5px;
+    }
+
+    /* Top Logo/Header Styling */
     .logo-container {
         display: flex;
         align-items: center;
@@ -39,13 +58,11 @@ st.markdown("""
     .logo-text { 
         color: #F37021; 
         font-weight: 800; 
-        font-size: 3.5rem; 
-        letter-spacing: -2px;
+        font-size: 4rem; 
+        letter-spacing: -3px;
         margin: 0;
     }
-    .logo-icon {
-        font-size: 3rem;
-    }
+    .logo-icon { font-size: 3.5rem; }
     
     .block-container { padding-top: 2rem; }
 
@@ -53,45 +70,34 @@ st.markdown("""
     div[data-testid="stMetric"] {
         background-color:#161B22;
         border: 1px solid #30363D;
-        border-radius: 12px;
-        padding: 20px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        border-radius: 15px;
+        padding: 25px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
 
-    /* Make Primary Metric Number Prominent */
+    /* Prominent Metric Numbers */
     div[data-testid="stMetricValue"] > div {
-        font-size: 2.8rem !important;
-        font-weight: 700 !important;
+        font-size: 3rem !important;
+        font-weight: 800 !important;
         color: #FFFFFF !important;
     }
 
-    /* Reduce Secondary Label Size */
-    div[data-testid="stMetricLabel"] > div > p {
-        font-size: 0.9rem !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        color: #8B949E !important;
-    }
-
-    /* Adjust Delta (Indicator) Size */
-    div[data-testid="stMetricDelta"] > div {
-        font-size: 0.9rem !important;
-        font-weight: 500;
-    }
-    
-    .streamlit-expanderHeader {
-        background-color: #161B22 !important;
-        border: 1px solid #30363D !important;
-        border-radius: 5px;
-        font-size: 1rem;
-        font-weight: 500;
-    }
-
-    /* Sidebar Buttons (Contrast adjustment) */
+    /* Adjusted Sidebar Buttons */
     [data-testid="stSidebar"] .stButton>button {
-        background-color: #0F1115;
-        border: 1px solid #0F1115;
-        color: white;
+        background-color: #0F1115 !important;
+        border: none !important;
+        color: white !important;
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        border-radius: 12px !important;
+        padding: 12px 20px !important;
+        margin-top: 20px !important;
+        width: 100%;
+        transition: 0.3s;
+    }
+    [data-testid="stSidebar"] .stButton>button:hover {
+        background-color: #1C2128 !important;
+        transform: translateY(-2px);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -168,7 +174,8 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.caption("Pulse Monitoring v2.3")
+    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+    st.caption("Pulse Monitoring v2.4")
     st.divider()
     
     customer_selection = st.selectbox(
@@ -182,7 +189,7 @@ with st.sidebar:
     time_labels = ["6 Hours", "24 Hours", "7 Days", "30 Days"]
     time_label = st.selectbox("Time Window", time_labels)
 
-    if st.button("🔄 Force Refresh"):
+    if st.button("🔄 Force Refresh Pulse"):
         st.cache_data.clear()
         st.rerun()
 
@@ -228,7 +235,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-st.markdown(f"Viewing: {customer_selection} | Range: {time_label}")
+st.markdown(f"<p style='font-size: 1.2rem; color: #8B949E;'>Viewing: <b>{customer_selection}</b> | Range: <b>{time_label}</b></p>", unsafe_allow_html=True)
 
 df = st.session_state.alerts
 
@@ -265,12 +272,12 @@ if df.empty:
 
 # ---------------- CLIENT TILES ----------------
 if customer_selection == "All Customers":
-    st.subheader("Client Health Overview")
+    st.subheader("Regional Health Status")
     counts = df["Customer"].value_counts()
     cols = st.columns(4)
     for i, (cust, cnt) in enumerate(counts.items()):
         with cols[i % 4]:
-            if st.button(f"{cust}\n\n{cnt} Alerts", key=f"c_{cust}", use_container_width=True):
+            if st.button(f"🏢 {cust}\n\n{cnt} Alerts", key=f"c_{cust}", use_container_width=True):
                 st.session_state.navigate_to_customer = cust
                 st.rerun()
     st.divider()
@@ -281,7 +288,7 @@ st.subheader(f"Log: {status_choice} Alerts by Condition")
 conditions = df["conditionName"].value_counts().index
 for condition in conditions:
     cond_df = df[df["conditionName"] == condition]
-    with st.expander(f"{condition} - {len(cond_df)} Alerts"):
+    with st.expander(f"📌 {condition} - {len(cond_df)} Alerts"):
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
         entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
         st.dataframe(
