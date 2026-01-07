@@ -1,59 +1,4 @@
-st.divider()
-    
-    # Show KPIs
-    c1, c2 = st.columns(2)
-    c1.metric("Total Alerts", len(df_view))
-    c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
-
-    st.divider()
-
-    # Show metrics and analysis
-    st.markdown("### 📊 Alert Metrics & Analysis")
-
-    metrics = generate_better_insights(df_view, time_label)
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric("Mean Time to Resolve", metrics["mttr"])
-        st.metric("Alert Frequency", metrics["frequency"])
-
-    with col2:
-        st.metric("Resolution Rate", metrics["resolution_rate"])
-        st.metric("Volume Status", metrics["trend"])
-
-    with col3:
-        st.markdown("**Top Affected Entities:**")
-        if metrics["top_entities"]:
-            for entity, count in metrics["top_entities"]:
-                st.markdown(f"• {entity}: {count} alerts")
-        else:
-            st.markdown("• No entity data available")
-
-    st.divider()
-
-    st.markdown("**Top Alert Condition:**")
-    if metrics["top_condition"] != "N/A":
-        st.markdown(f"🔔 **{metrics['top_condition']}**")
-    else:
-        st.markdown("No conditions detected")
-
-    st.markdown("**Recommendations:**")
-    for rec in metrics["recommendations"]:
-        st.markdown(f"• {rec}")
-
-    st.divider()
-
-    # ---- ENTITY BREAKDOWN ----
-    st.markdown("### Alert Details by Condition")
-
-    top_conditions = df_view["conditionName"].value_counts()
-    for cond, cnt in top_conditions.items():
-        with st.expander(f"{cond} ({cnt})"):
-            subset = df_view[df_view["conditionName"] == cond]
-            entity_summary = subset.groupby("Entity").size().reset_index(name="Count")
-            entity_summary = entity_summary.sort_values("Count", ascending=False)
-            st.dataframe(entity_summary, use_container_width=True, hide_index=True)import streamlit as st
+import streamlit as st
 import requests
 import pandas as pd
 import datetime
@@ -445,8 +390,6 @@ else:
 st.markdown("**Recommendations:**")
 for rec in metrics["recommendations"]:
     st.markdown(f"• {rec}")
-
-st.divider()
 
 st.divider()
 
