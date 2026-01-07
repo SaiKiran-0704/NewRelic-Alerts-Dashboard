@@ -129,7 +129,7 @@ st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>")
 # Delta color: inverse (Red is bad/up, Green is good/down)
 c1, c2 = st.columns(2)
 c1.metric(
-    label="Total Alerts (Current Window)", 
+    label="Total Alerts", 
     value=curr_total, 
     delta=delta_val, 
     delta_color="inverse"
