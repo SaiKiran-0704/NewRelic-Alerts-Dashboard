@@ -101,42 +101,37 @@ def fetch_account(name, api_key, account_id, time_clause):
     except:
         return pd.DataFrame()
 
-# ---------------- SIDEBAR ----------------
+# ---------------- SIDEBAR DATA PRE-LOAD ----------------
+# We need to load data early to populate the condition filter
+all_rows = []
+time_map = {
+    "6 Hours": "SINCE 6 hours ago",
+    "24 Hours": "SINCE 24 hours ago",
+    "7 Days": "SINCE 7 days ago",
+    "30 Days": "SINCE 30 days ago"
+}
+
+# Sidebar inputs that affect data fetching
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v1.3")
+    st.caption("Pulse Monitoring v1.4")
     st.divider()
     
     customer_selection = st.selectbox(
         "Client Selector",
         ["All Customers"] + list(CLIENTS.keys()),
-        key="customer_filter"
+        key="customer_filter_input"
     )
-
-    status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
-
-    time_map = {
-        "6 Hours": "SINCE 6 hours ago",
-        "24 Hours": "SINCE 24 hours ago",
-        "7 Days": "SINCE 7 days ago",
-        "30 Days": "SINCE 30 days ago"
-    }
+    
     time_label = st.selectbox("Time Window", list(time_map.keys()))
     time_clause = time_map[time_label]
 
-    if st.button("🔄 Force Refresh"):
-        st.cache_data.clear()
-        st.rerun()
-
-# ---------------- LOAD & PROCESS DATA ----------------
-all_rows = []
+# Data Fetching Logic
 targets = CLIENTS.items() if customer_selection == "All Customers" else [(customer_selection, CLIENTS.get(customer_selection, {}))]
-
-with st.spinner("Syncing Pulse..."):
-    for name, cfg in targets:
-        if cfg:
-            df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
-            if not df_res.empty: all_rows.append(df_res)
+for name, cfg in targets:
+    if cfg:
+        df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
+        if not df_res.empty: all_rows.append(df_res)
 
 if all_rows:
     raw = pd.concat(all_rows)
@@ -147,15 +142,37 @@ if all_rows:
         end_time=("timestamp", "max"),
         events=("event", "nunique")
     ).reset_index()
-    
     grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
     
-    # Filter by selected status
-    if status_choice != "All":
-        display_df = grouped[grouped["Status"] == status_choice].copy()
-    else:
-        display_df = grouped.copy()
+    # Get all available conditions for the filter
+    available_conditions = sorted(grouped["conditionName"].unique().tolist())
+else:
+    grouped = pd.DataFrame()
+    available_conditions = []
 
+# ---------------- SIDEBAR FILTERS (POST-LOAD) ----------------
+with st.sidebar:
+    status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
+    
+    # NEW: Condition Multi-select Filter
+    selected_conditions = st.multiselect(
+        "Filter Conditions",
+        options=available_conditions,
+        default=available_conditions,
+        help="Filter the dashboard by specific alert conditions."
+    )
+
+    if st.button("🔄 Force Refresh"):
+        st.cache_data.clear()
+        st.rerun()
+
+# ---------------- FILTERING LOGIC ----------------
+if not grouped.empty:
+    mask = (grouped["conditionName"].isin(selected_conditions))
+    if status_choice != "All":
+        mask &= (grouped["Status"] == status_choice)
+    
+    display_df = grouped[mask].copy()
     st.session_state.alerts = display_df.sort_values("start_time", ascending=False)
     st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
 else:
@@ -168,13 +185,11 @@ st.markdown(f"**Viewing:** `{customer_selection}` | **Range:** `{time_label}`")
 df = st.session_state.alerts
 
 # ---------------- DYNAMIC KPI ROW ----------------
-# If Active or Closed is selected, show only MTTR and the Count for that selection
 if status_choice in ["Active", "Closed"]:
     c1, c2 = st.columns(2)
     c1.metric(f"{status_choice} Alerts", len(df))
     c2.metric("Avg. Duration" if status_choice == "Active" else "Avg. Resolution Time", calculate_mttr(df))
 else:
-    # Standard 3-column KPI for "All" view
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Alerts", len(df))
     c2.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
@@ -183,7 +198,7 @@ else:
 st.divider()
 
 if df.empty:
-    st.info(f"No {status_choice.lower()} alerts found. 🎉")
+    st.info(f"No alerts found for the selected filters. 🎉")
     st.stop()
 
 # ---------------- CLIENT TILES (ONLY ON ALL VIEW) ----------------
