@@ -28,18 +28,6 @@ st.markdown("""
         background-color: #161B22 !important;
         border: 1px solid #30363D !important;
         border-radius: 5px;
-        font-size: 1.1rem;
-    }
-
-    .stButton>button {
-        background-color: #1C2128;
-        border: 1px solid #30363D;
-        color: white;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        border-color: #F37021;
-        color: #F37021;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -48,180 +36,124 @@ st.markdown("""
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
 
-if "alerts" not in st.session_state: st.session_state.alerts = None
-if "updated" not in st.session_state: st.session_state.updated = None
 if "customer_filter" not in st.session_state: st.session_state.customer_filter = "All Customers"
-if "navigate_to_customer" not in st.session_state: st.session_state.navigate_to_customer = None
-
-if st.session_state.navigate_to_customer:
-    st.session_state.customer_filter = st.session_state.navigate_to_customer
-    st.session_state.navigate_to_customer = None
 
 # ---------------- HELPERS ----------------
-def format_duration(td):
-    s = int(td.total_seconds())
-    if s < 60: return f"{s}s"
-    m, s = divmod(s, 60)
-    h, m = divmod(m, 60)
-    return f"{h}h {m}m" if h else f"{m}m {s}s"
-
 def calculate_mttr(df):
-    # For MTTR, we usually look at closed alerts, but this calculates duration for the provided set
     if df.empty: return "N/A"
-    
-    # Use start and end times to find duration in minutes
-    # For Active alerts, end_time is the same as start_time in the grouping logic, 
-    # so we use 'now' for Active and 'end_time' for Closed.
     durations = []
     now = datetime.datetime.utcnow()
-    
     for _, row in df.iterrows():
         if row["Status"] == "Active":
             durations.append((now - row["start_time"]).total_seconds() / 60)
         else:
             durations.append((row["end_time"] - row["start_time"]).total_seconds() / 60)
-            
     avg = sum(durations) / len(durations)
     return f"{int(avg//60)}h {int(avg%60)}m" if avg >= 60 else f"{int(avg)}m"
 
-def get_resolution_rate(df):
-    if df.empty: return "0%"
-    return f"{(len(df[df.Status=='Closed'])/len(df))*100:.0f}%"
-
 @st.cache_data(ttl=300)
-def fetch_account(name, api_key, account_id, time_clause):
-    query = f"""
-    {{ actor {{ account(id: {account_id}) {{
-          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name FROM NrAiIncident WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
-            results
-          }}
-        }} }} }}
-    """
+def fetch_nrql(api_key, account_id, query):
+    gql_query = f"{{ actor {{ account(id: {account_id}) {{ nrql(query: \"{query}\") {{ results }} }} }} }}"
     try:
-        r = requests.post(ENDPOINT, json={"query": query}, headers={"API-Key": api_key}, timeout=15)
-        data = r.json()["data"]["actor"]["account"]["nrql"]["results"]
-        df = pd.DataFrame(data)
-        if not df.empty:
-            df["Customer"] = name
-            df.rename(columns={"entity.name": "Entity"}, inplace=True)
-        return df
+        r = requests.post(ENDPOINT, json={"query": gql_query}, headers={"API-Key": api_key}, timeout=15)
+        return r.json()["data"]["actor"]["account"]["nrql"]["results"]
     except:
-        return pd.DataFrame()
+        return []
+
+def process_alerts(data, name):
+    df = pd.DataFrame(data)
+    if df.empty: return pd.DataFrame()
+    df["Customer"] = name
+    df.rename(columns={"entity.name": "Entity"}, inplace=True)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+    return df
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v1.2")
-    st.divider()
-    
-    customer = st.selectbox(
-        "Client Selector",
-        ["All Customers"] + list(CLIENTS.keys()),
-        key="customer_filter"
-    )
-
-    # Status Filter
+    customer_selection = st.selectbox("Client Selector", ["All Customers"] + list(CLIENTS.keys()), key="customer_filter")
     status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
-
-    time_map = {
-        "6 Hours": "SINCE 6 hours ago",
-        "24 Hours": "SINCE 24 hours ago",
-        "7 Days": "SINCE 7 days ago",
-        "30 Days": "SINCE 30 days ago"
+    
+    time_options = {
+        "6 Hours": {"current": "SINCE 6 hours ago", "previous": "SINCE 12 hours ago UNTIL 6 hours ago"},
+        "24 Hours": {"current": "SINCE 24 hours ago", "previous": "SINCE 48 hours ago UNTIL 24 hours ago"},
+        "7 Days": {"current": "SINCE 7 days ago", "previous": "SINCE 14 days ago UNTIL 7 days ago"}
     }
-    time_label = st.selectbox("Time Window", list(time_map.keys()))
-    time_clause = time_map[time_label]
+    time_label = st.selectbox("Time Window", list(time_options.keys()))
+    clauses = time_options[time_label]
 
-    if st.button("🔄 Force Refresh"):
-        st.cache_data.clear()
-        st.rerun()
+# ---------------- DATA FETCHING ----------------
+current_rows = []
+prev_rows = []
+targets = CLIENTS.items() if customer_selection == "All Customers" else [(customer_selection, CLIENTS.get(customer_selection, {}))]
 
-    if st.session_state.updated:
-        st.markdown(f"**Last Sync:** `{st.session_state.updated}`")
-
-# ---------------- LOAD & PROCESS DATA ----------------
-all_rows = []
-targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS.get(customer, {}))]
-
-with st.spinner("Syncing..."):
+with st.spinner("Analyzing trends..."):
     for name, cfg in targets:
-        if cfg:
-            df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
-            if not df_res.empty: all_rows.append(df_res)
+        if not cfg: continue
+        # Fetch Current
+        curr_q = f"SELECT timestamp, conditionName, incidentId, event, entity.name FROM NrAiIncident WHERE event IN ('open','close') {clauses['current']} LIMIT MAX"
+        current_rows.append(process_alerts(fetch_nrql(cfg["api_key"], cfg["account_id"], curr_q), name))
+        # Fetch Previous for Delta
+        prev_q = f"SELECT incidentId FROM NrAiIncident WHERE event = 'open' {clauses['previous']} LIMIT MAX"
+        prev_rows.append(pd.DataFrame(fetch_nrql(cfg["api_key"], cfg["account_id"], prev_q)))
 
-if all_rows:
-    raw = pd.concat(all_rows)
-    raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
-    
-    grouped = raw.groupby(["incidentId", "Customer", "conditionName", "priority", "Entity"]).agg(
-        start_time=("timestamp", "min"),
-        end_time=("timestamp", "max"),
-        events=("event", "nunique")
+# ---------------- CALCULATE DELTA ----------------
+curr_df = pd.concat(current_rows) if current_rows else pd.DataFrame()
+prev_total = sum([len(d["incidentId"].unique()) if not d.empty else 0 for d in prev_rows])
+
+if not curr_df.empty:
+    # Grouping to incidents
+    grouped = curr_df.groupby(["incidentId", "Customer", "conditionName", "Entity"]).agg(
+        start_time=("timestamp", "min"), end_time=("timestamp", "max"), events=("event", "nunique")
     ).reset_index()
-    
     grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
     
-    # Filter by selected status before calculating session state
-    if status_choice != "All":
-        display_df = grouped[grouped["Status"] == status_choice].copy()
+    # Filter by Status
+    display_df = grouped if status_choice == "All" else grouped[grouped["Status"] == status_choice]
+    
+    curr_total = len(grouped["incidentId"].unique())
+    # Calculate percentage change
+    if prev_total > 0:
+        delta_val = f"{((curr_total - prev_total) / prev_total) * 100:.1f}%"
     else:
-        display_df = grouped.copy()
-
-    st.session_state.alerts = display_df.sort_values("start_time", ascending=False)
-    st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
+        delta_val = "New"
 else:
-    st.session_state.alerts = pd.DataFrame()
+    display_df = pd.DataFrame()
+    curr_total = 0
+    delta_val = "0%"
 
 # ---------------- MAIN CONTENT ----------------
-st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
-st.markdown(f"**Viewing:** `{customer}` | **Range:** `{time_label}`")
+st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>")
 
-df = st.session_state.alerts
-if df.empty:
-    st.info(f"No {status_choice.lower()} alerts found. 🎉")
-    st.stop()
-
-# ---------------- DYNAMIC KPI ROW ----------------
-# If Active or Closed is selected, show only MTTR. If All, show all 3.
-if status_choice in ["Active", "Closed"]:
-    st.metric("Avg. Duration" if status_choice == "Active" else "Avg. Resolution Time", calculate_mttr(df))
-else:
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Alerts", len(df))
-    c2.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
-    c3.metric("Resolution Rate", get_resolution_rate(df))
+# KPI Row with Comparison Delta
+c1, c2 = st.columns(2)
+c1.metric(
+    label="Total Alerts (Current Window)", 
+    value=curr_total, 
+    delta=delta_val, 
+    delta_color="inverse"
+)
+c2.metric(
+    label="Avg. Resolution Time", 
+    value=calculate_mttr(display_df)
+)
 
 st.divider()
 
-# ---------------- CLIENT TILES ----------------
-if customer == "All Customers":
-    st.subheader("Client Health Overview")
-    counts = df["Customer"].value_counts()
-    cols = st.columns(4)
-    for i, (cust, cnt) in enumerate(counts.items()):
-        with cols[i % 4]:
-            if st.button(f"{cust}\n\n{cnt} Alerts", key=f"c_{cust}", use_container_width=True):
-                st.session_state.navigate_to_customer = cust
-                st.rerun()
-    st.divider()
+if display_df.empty:
+    st.info("No alerts found in this window.")
+    st.stop()
 
-# ---------------- HIERARCHICAL INCIDENT LOG ----------------
+# ---------------- HIERARCHICAL LOG ----------------
 st.subheader(f"📋 {status_choice} Alerts by Condition")
-
-conditions = df["conditionName"].value_counts().index
-for condition in conditions:
-    cond_df = df[df["conditionName"] == condition]
-    with st.expander(f"**{condition}** — {len(cond_df)} Alerts"):
-        entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
-        entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
+for condition in display_df["conditionName"].value_counts().index:
+    cond_df = display_df[display_df["conditionName"] == condition]
+    
+    # Updated: Removed the ** symbols from the label
+    with st.expander(f"{condition} — {len(cond_df)} Alerts"):
+        entity_sum = cond_df.groupby("Entity").size().reset_index(name="Alerts")
         st.dataframe(
-            entity_summary, 
+            entity_sum.sort_values("Alerts", ascending=False), 
             hide_index=True, 
-            use_container_width=True,
-            column_config={
-                "Alert Count": st.column_config.NumberColumn("Alerts", format="%d 🚨")
-            }
+            use_container_width=True
         )
-
-# ---------------- FOOTER ----------------
-st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
