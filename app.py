@@ -1,319 +1,241 @@
 import streamlit as st
-
 import requests
-
 import pandas as pd
-
 import datetime
 
-
-
 # ---------------- PAGE CONFIG ----------------
-
 st.set_page_config(
-
-    page_title="Pulse | Quickplay Monitoring",
-
-    layout="wide",
-
-    page_icon="📡"
-
+    page_title="Quickplay Alerts",
+    layout="wide",
+    page_icon="🔥"
 )
 
-
-
-# ---------------- MODERN UI STYLING ----------------
-
+# ---------------- CLEAN UI ----------------
 st.markdown("""
-
 <style>
+.stApp { background-color:#0F1115; color:#E6E6E6; }
+#MainMenu, footer, header { visibility:hidden; }
 
-    /* Main Background and Text */
+section[data-testid="stSidebar"] {
+    background-color:#151821;
+    border-right:1px solid #2A2F3A;
+}
 
-    .stApp { background-color: #0E1117; color: #FFFFFF; }
+div[data-testid="stMetric"] {
+    background-color:#151821;
+    border:1px solid #2A2F3A;
+    border-radius:10px;
+    padding:16px;
+}
 
-    
-
-    /* Custom KPI Cards */
-
-    [data-testid="stMetric"] {
-
-        background: linear-gradient(135deg, #1A1C23 0%, #111318 100%);
-
-        border: 1px solid #30363D;
-
-        border-radius: 12px;
-
-        padding: 20px !important;
-
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-
-    }
-
-    
-
-    /* Glowing Status Badges */
-
-    .status-active {
-
-        color: #FF4B4B;
-
-        font-weight: bold;
-
-        text-shadow: 0 0 10px rgba(255, 75, 75, 0.4);
-
-    }
-
-    .status-closed {
-
-        color: #00D166;
-
-        font-weight: bold;
-
-    }
-
-
-
-    /* Sidebar Styling */
-
-    section[data-testid="stSidebar"] {
-
-        background-color: #161B22 !important;
-
-        border-right: 1px solid #30363D;
-
-    }
-
-
-
-    /* Modern Buttons for Customers */
-
-    .stButton>button {
-
-        border-radius: 8px;
-
-        border: 1px solid #30363D;
-
-        background-color: #21262D;
-
-        transition: all 0.3s ease;
-
-    }
-
-    .stButton>button:hover {
-
-        border-color: #58A6FF;
-
-        box-shadow: 0 0 10px rgba(88, 166, 255, 0.2);
-
-    }
-
+.stDataFrame {
+    border:1px solid #2A2F3A;
+    border-radius:8px;
+}
 </style>
-
 """, unsafe_allow_html=True)
 
-
-
-# ---------------- CONFIG & DATA (KEEPING YOUR LOGIC) ----------------
-
+# ---------------- CONFIG ----------------
 CLIENTS = st.secrets.get("clients", {})
-
 ENDPOINT = "https://api.newrelic.com/graphql"
 
+# ---------------- SESSION STATE ----------------
+if "alerts" not in st.session_state:
+    st.session_state.alerts = None
+if "updated" not in st.session_state:
+    st.session_state.updated = None
+if "customer_filter" not in st.session_state:
+    st.session_state.customer_filter = "All Customers"
+if "navigate_to_customer" not in st.session_state:
+    st.session_state.navigate_to_customer = None
 
-
-# [Keep your existing session state and navigation logic here]
-
-if "alerts" not in st.session_state: st.session_state.alerts = None
-
-if "updated" not in st.session_state: st.session_state.updated = None
-
-if "customer_filter" not in st.session_state: st.session_state.customer_filter = "All Customers"
-
-if "navigate_to_customer" not in st.session_state: st.session_state.navigate_to_customer = None
-
-
-
+# -------- SAFE NAVIGATION (MUST BE BEFORE SIDEBAR) --------
 if st.session_state.navigate_to_customer:
-
-    st.session_state.customer_filter = st.session_state.navigate_to_customer
-
-    st.session_state.navigate_to_customer = None
-
-
+    st.session_state.customer_filter = st.session_state.navigate_to_customer
+    st.session_state.navigate_to_customer = None
 
 # ---------------- SIDEBAR ----------------
-
 with st.sidebar:
-
-    st.image("https://img.icons8.com/fluency/96/radar.png", width=60)
-
-    st.title("Pulse Ops")
-
-    st.markdown("---")
-
-    
-
-    customer = st.selectbox(
-
-        "Customer Environment",
-
-        ["All Customers"] + list(CLIENTS.keys()),
-
-        key="customer_filter"
-
-    )
-
-
-
-    time_map = {
-
-        "Last 6 Hours": "SINCE 6 hours ago",
-
-        "Last 24 Hours": "SINCE 24 hours ago",
-
-        "Last 7 Days": "SINCE 7 days ago"
-
-    }
-
-    time_label = st.selectbox("Time Window", list(time_map.keys()))
-
-    
-
-    if st.session_state.updated:
-
-        st.caption(f"✨ Last sync: {st.session_state.updated}")
-
-
-
-# [Keep your existing helper functions: format_duration, calculate_mttr, fetch_account]
-
-# ... (Reference your original fetch logic here) ...
-
-
-
-# ---------------- MAIN DASHBOARD UI ----------------
-
-st.title("📡 Sentinel Dashboard")
-
-st.markdown(f"**Current View:** `{customer}`")
-
-
-
-# ---------------- KPI ROW ----------------
-
-if st.session_state.alerts is not None:
-
-    df = st.session_state.alerts
-
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-
-    
-
-    with kpi1:
-
-        st.metric("Total Incidents", len(df))
-
-    with kpi2:
-
-        active_count = len(df[df.Status == "Active"])
-
-        st.metric("Active Now", active_count, delta=active_count, delta_color="inverse")
-
-    with kpi3:
-
-        # Improved MTTR Calculation Display
-
-        from __main__ import calculate_mttr # Ensure helper is accessible
-
-        st.metric("Avg Resolution (MTTR)", calculate_mttr(df))
-
-    with kpi4:
-
-        st.metric("System Health", f"{(1 - (active_count/len(df) if len(df)>0 else 0))*100:.1f}%")
-
-
-
-    st.markdown("---")
-
-
-
-    # ---------------- CUSTOMER GRID (Visual Cards) ----------------
-
-    if customer == "All Customers":
-
-        st.subheader("Client Health Overview")
-
-        counts = df["Customer"].value_counts()
-
-        
-
-        # Grid Layout
-
-        cols = st.columns(4)
-
-        for idx, (cust, cnt) in enumerate(counts.items()):
-
-            with cols[idx % 4]:
-
-                container = st.container()
-
-                # Determine color based on alert volume
-
-                color = "🔴" if cnt > 5 else "🟡" if cnt > 0 else "🟢"
-
-                if st.button(f"{color} {cust}\n\n{cnt} Alerts", key=f"btn_{cust}", use_container_width=True):
-
-                    st.session_state.navigate_to_customer = cust
-
-                    st.rerun()
-
-
-
-    # ---------------- DATA VIEW ----------------
-
-    st.markdown("### 📝 Incident Log")
-
-    
-
-    # Styled Dataframe
-
-    def style_status(val):
-
-        color = '#FF4B4B' if val == "Active" else '#00D166'
-
-        return f'color: {color}; font-weight: bold'
-
-
-
-    # Apply styling to a subset for better UI
-
-    display_df = df[['Status', 'Customer', 'conditionName', 'Entity', 'Duration', 'start_time']].copy()
-
-    
-
-    st.dataframe(
-
-        display_df,
-
-        use_container_width=True,
-
-        hide_index=True,
-
-        column_config={
-
-            "Status": st.column_config.TextColumn("Status", width="small"),
-
-            "start_time": st.column_config.DatetimeColumn("Detected At", format="D MMM, HH:mm"),
-
-            "Duration": "Age/Duration ⏳"
-
-        }
-
-    )
-
-
-
+    st.markdown("### Filters")
+
+    customer = st.selectbox(
+        "Customer",
+        ["All Customers"] + list(CLIENTS.keys()),
+        key="customer_filter"
+    )
+
+    time_map = {
+        "Last 6 Hours": "SINCE 6 hours ago",
+        "Last 24 Hours": "SINCE 24 hours ago",
+        "Last 7 Days": "SINCE 7 days ago",
+        "Last 1 Month": "SINCE 30 days ago",
+        "Last 3 Months": "SINCE 90 days ago"
+    }
+
+    time_label = st.selectbox("Time Range", list(time_map.keys()))
+    time_clause = time_map[time_label]
+
+    if st.session_state.updated:
+        st.caption(f"Updated at {st.session_state.updated}")
+
+# ---------------- HELPERS ----------------
+def format_duration(td):
+    s = int(td.total_seconds())
+    if s < 60:
+        return f"{s}s"
+    m, s = divmod(s, 60)
+    h, m = divmod(m, 60)
+    return f"{h}h {m}m" if h else f"{m}m {s}s"
+
+def calculate_mttr(df):
+    closed = df[df["Status"] == "Closed"]
+    if closed.empty:
+        return "N/A"
+    mins = []
+    for d in closed["Duration"]:
+        total = 0
+        for p in d.split():
+            if "h" in p:
+                total += int(p.replace("h","")) * 60
+            elif "m" in p:
+                total += int(p.replace("m",""))
+        mins.append(total)
+    avg = sum(mins) / len(mins)
+    return f"{int(avg//60)}h {int(avg%60)}m" if avg >= 60 else f"{int(avg)}m"
+
+def get_resolution_rate(df):
+    if df.empty:
+        return "0%"
+    return f"{(len(df[df.Status=='Closed'])/len(df))*100:.0f}%"
+
+# ---------------- DATA FETCH ----------------
+@st.cache_data(ttl=300)
+def fetch_account(name, api_key, account_id, time_clause):
+    query = f"""
+    {{
+      actor {{
+        account(id: {account_id}) {{
+          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name FROM NrAiIncident WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
+            results
+          }}
+        }}
+      }}
+    }}
+    """
+    r = requests.post(
+        ENDPOINT,
+        json={"query": query},
+        headers={"API-Key": api_key}
+    )
+    df = pd.DataFrame(r.json()["data"]["actor"]["account"]["nrql"]["results"])
+    if not df.empty:
+        df["Customer"] = name
+        df.rename(columns={"entity.name": "Entity"}, inplace=True)
+    return df
+
+# ---------------- LOAD DATA ----------------
+all_rows = []
+targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
+
+with st.spinner("Loading alerts…"):
+    for name, cfg in targets:
+        df = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
+        if not df.empty:
+            all_rows.append(df)
+
+if all_rows:
+    raw = pd.concat(all_rows)
+    raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
+
+    grouped = raw.groupby(
+        ["incidentId", "Customer", "conditionName", "priority", "Entity"]
+    ).agg(
+        start_time=("timestamp", "min"),
+        end_time=("timestamp", "max"),
+        events=("event", "nunique")
+    ).reset_index()
+
+    grouped["Status"] = grouped["events"].apply(
+        lambda x: "Active" if x == 1 else "Closed"
+    )
+
+    now = datetime.datetime.utcnow()
+    grouped["Duration"] = grouped.apply(
+        lambda r: format_duration(
+            (now - r.start_time) if r.Status == "Active"
+            else (r.end_time - r.start_time)
+        ),
+        axis=1
+    )
+
+    st.session_state.alerts = grouped.sort_values("start_time", ascending=False)
+    st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
 else:
+    st.session_state.alerts = pd.DataFrame()
 
-    st.info("Select a customer or refresh to load alert data.")
+# ---------------- HEADER ----------------
+st.markdown(
+    "## 🔥 Quickplay Alerts"
+    if customer == "All Customers"
+    else f"## 🔥 Quickplay Alerts — **{customer}**"
+)
+
+st.divider()
+
+df = st.session_state.alerts
+if df.empty:
+    st.success("No alerts found 🎉")
+    st.stop()
+
+# ---------------- KPIs ----------------
+c1, c2 = st.columns(2)
+c1.metric("Total Alerts", len(df))
+c2.metric("Active Alerts", len(df[df.Status == "Active"]))
+
+st.divider()
+
+# ---------------- ALERTS BY CUSTOMER ----------------
+if customer == "All Customers":
+    st.markdown("### Alerts by Customer")
+    counts = df["Customer"].value_counts()
+
+    cols_per_row = 3
+    for i in range(0, len(counts), cols_per_row):
+        cols = st.columns(cols_per_row)
+        for j, (cust, cnt) in enumerate(list(counts.items())[i:i+cols_per_row]):
+            with cols[j]:
+                if st.button(
+                    f"{cnt}\nAlerts\n\n{cust}",
+                    key=f"card_{cust}",
+                    use_container_width=True
+                ):
+                    st.session_state.navigate_to_customer = cust
+                    st.rerun()
+
+st.divider()
+
+# ---------------- METRICS ----------------
+st.markdown("### 📊 Alert Metrics")
+c1, c2, c3 = st.columns(3)
+
+with c1:
+    st.metric("MTTR", calculate_mttr(df))
+with c2:
+    st.metric("Resolution Rate", get_resolution_rate(df))
+with c3:
+    st.metric("Unique Entities", df["Entity"].nunique())
+
+st.divider()
+
+# ---------------- ENTITY BREAKDOWN ----------------
+st.markdown("### Alert Details by Condition")
+for cond, cnt in df["conditionName"].value_counts().items():
+    with st.expander(f"{cond} ({cnt})"):
+        subset = df[df["conditionName"] == cond]
+        entity_summary = (
+            subset.groupby("Entity")
+            .size()
+            .reset_index(name="Count")
+            .sort_values("Count", ascending=False)
+        )
+        st.dataframe(entity_summary, use_container_width=True, hide_index=True)
