@@ -314,10 +314,29 @@ else:
 
 # ---------------- HEADER ----------------
 st.markdown("## 🔥 Quickplay Alerts")
-if st.session_state.clicked_customer:
-    st.caption(f"Viewing: {st.session_state.clicked_customer}")
-else:
-    st.caption("Click a customer to view details")
+st.divider()
+
+# ---- FILTERS IN MAIN AREA ----
+col1, col2 = st.columns(2)
+
+with col1:
+    customer = st.selectbox(
+        "Select Customer",
+        ["All Customers"] + list(CLIENTS.keys()),
+        key="customer_filter_main"
+    )
+
+with col2:
+    time_map = {
+        "Last 6 Hours": "SINCE 6 hours ago",
+        "Last 24 Hours": "SINCE 24 hours ago",
+        "Last 7 Days": "SINCE 7 days ago",
+        "Last 1 Month": "SINCE 30 days ago",
+        "Last 3 Months": "SINCE 90 days ago"
+    }
+    time_label = st.selectbox("Select Time Range", list(time_map.keys()))
+    time_clause = time_map[time_label]
+
 st.divider()
 
 df = st.session_state.alerts
@@ -325,7 +344,7 @@ if df.empty:
     st.success("No alerts found 🎉")
     st.stop()
 
-# ---------------- CUSTOMER DRILLDOWN ----------------
+# ---- CUSTOMER DRILLDOWN ----
 df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
@@ -336,52 +355,6 @@ if st.session_state.clicked_customer:
         if st.button("🔄 Reset", use_container_width=True):
             st.session_state.clicked_customer = None
             st.rerun()
-else:
-    # Show customer cards only when viewing all
-    st.markdown("### Alerts by Customer")
-    
-    customer_counts = df["Customer"].value_counts().sort_values(ascending=False)
-    
-    cols_per_row = 3
-    
-    for i in range(0, len(customer_counts), cols_per_row):
-        cols = st.columns(cols_per_row)
-        
-        for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
-            with cols[j]:
-                if st.button(
-                    f"",
-                    key=f"card_{cust_name}",
-                    use_container_width=True,
-                    help=f"Click to view {cust_name} details"
-                ):
-                    st.session_state.clicked_customer = cust_name
-                    st.rerun()
-                
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
-                    border-radius: 12px;
-                    padding: 20px;
-                    text-align: center;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    color: white;
-                    min-height: 200px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                ">
-                    <div style="font-size: 32px; font-weight: bold; margin-bottom: 10px;">{count}</div>
-                    <div style="font-size: 12px; opacity: 0.9;">Alerts</div>
-                    <div style="font-size: 16px; font-weight: bold; margin-top: 20px;">{cust_name}</div>
-                </div>
-                """, unsafe_allow_html=True)
-    
-    st.divider()
-    st.stop()
-
-# ---- ONLY SHOW THIS WHEN A CUSTOMER IS SELECTED ----
 
 # ---------------- KPIs ----------------
 c1, c2 = st.columns(2)
@@ -429,8 +402,10 @@ st.divider()
 
 st.divider()
 
-# ---------------- CUSTOMER CHART - CARDS VIEW ----------------
-if customer == "All Customers":
+# ---- SHOW CARDS AND ANALYTICS WHEN "ALL CUSTOMERS" ----
+if not st.session_state.clicked_customer and customer == "All Customers":
+    
+    # Alerts by Customer Cards
     st.markdown("### Alerts by Customer")
     
     customer_counts = df["Customer"].value_counts().sort_values(ascending=False)
@@ -470,6 +445,45 @@ if customer == "All Customers":
                     <div style="font-size: 16px; font-weight: bold; margin-top: 20px;">{cust_name}</div>
                 </div>
                 """, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Show overall analytics for all customers
+    st.markdown("### 📊 Alert Metrics & Analysis (All Customers)")
+    
+    metrics = generate_better_insights(df_view, time_label)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Mean Time to Resolve", metrics["mttr"])
+        st.metric("Alert Frequency", metrics["frequency"])
+    
+    with col2:
+        st.metric("Resolution Rate", metrics["resolution_rate"])
+        st.metric("Volume Status", metrics["trend"])
+    
+    with col3:
+        st.markdown("**Top Affected Entities:**")
+        if metrics["top_entities"]:
+            for entity, count in metrics["top_entities"]:
+                st.markdown(f"• {entity}: {count} alerts")
+        else:
+            st.markdown("• No entity data available")
+    
+    st.divider()
+    
+    st.markdown("**Top Alert Condition:**")
+    if metrics["top_condition"] != "N/A":
+        st.markdown(f"🔔 **{metrics['top_condition']}**")
+    else:
+        st.markdown("No conditions detected")
+    
+    st.markdown("**Recommendations:**")
+    for rec in metrics["recommendations"]:
+        st.markdown(f"• {rec}")
+    
+    st.divider()
 
 # ---------------- ENTITY BREAKDOWN ----------------
 st.markdown("### Alert Details by Condition")
