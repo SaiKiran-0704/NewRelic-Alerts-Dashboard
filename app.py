@@ -71,6 +71,7 @@ with st.sidebar:
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
+# Reset click selection when dropdown changes
 if customer != "All Customers":
     st.session_state.clicked_customer = None
 
