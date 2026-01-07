@@ -424,43 +424,24 @@ if customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                # Get logo path for customer
+                # Display logo
                 logo_path = CUSTOMER_LOGOS.get(cust_name)
-                
-                # Card styling with logo using Streamlit
-                card_html = f"""
-                <div style="
-                    background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
-                    border-radius: 12px;
-                    padding: 20px;
-                    text-align: center;
-                    cursor: pointer;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    color: white;
-                    min-height: 180px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                ">
-                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">{cust_name}</div>
-                    <div style="font-size: 32px; font-weight: bold;">{count}</div>
-                    <div style="font-size: 12px; margin-top: 8px; opacity: 0.9;">Alerts</div>
-                </div>
-                """
-                st.markdown(card_html, unsafe_allow_html=True)
-                
-                # Display logo using Streamlit (if path exists)
                 if logo_path:
                     try:
-                        st.image(logo_path, width=100)
+                        st.image(logo_path, width=120, use_container_width=False)
                     except:
                         st.markdown("📊")
                 
+                # Display customer info
+                st.markdown(f"### {cust_name}")
+                st.markdown(f"## {count} Alerts")
+                
                 # Button to drill down
-                if st.button(f"View {cust_name}", key=f"btn_{cust_name}"):
+                if st.button(f"View Details", key=f"btn_{cust_name}", use_container_width=True):
                     st.session_state.clicked_customer = cust_name
                     st.rerun()
+                
+                st.divider()
 
 st.divider()
 
