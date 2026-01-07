@@ -99,7 +99,7 @@ if "customer_filter" not in st.session_state:
 if "navigate_to_customer" not in st.session_state:
     st.session_state.navigate_to_customer = None
 
-# -------- SAFE NAVIGATION (BEFORE SIDEBAR) --------
+# -------- SAFE NAVIGATION (RUN BEFORE SIDEBAR) --------
 if st.session_state.navigate_to_customer:
     st.session_state.customer_filter = st.session_state.navigate_to_customer
     st.session_state.navigate_to_customer = None
@@ -137,15 +137,15 @@ def format_duration(td):
     h, m = divmod(m, 60)
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
-# ---------------- DATA FETCH ----------------
+# ---------------- SAFE DATA FETCH ----------------
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
     query = f"""
     {{
       actor {{
         account(id: {account_id}) {{
-          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name 
-                       FROM NrAiIncident 
+          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name
+                       FROM NrAiIncident
                        WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
             results
           }}
@@ -153,16 +153,36 @@ def fetch_account(name, api_key, account_id, time_clause):
       }}
     }}
     """
-    r = requests.post(
-        ENDPOINT,
-        json={"query": query},
-        headers={"API-Key": api_key}
-    )
-    df = pd.DataFrame(r.json()["data"]["actor"]["account"]["nrql"]["results"])
-    if not df.empty:
+
+    try:
+        r = requests.post(
+            ENDPOINT,
+            json={"query": query},
+            headers={"API-Key": api_key},
+            timeout=15
+        )
+        response = r.json()
+
+        if "errors" in response:
+            st.warning(f"⚠️ New Relic error for **{name}** – skipped")
+            return pd.DataFrame()
+
+        account = response.get("data", {}).get("actor", {}).get("account")
+        if not account or "nrql" not in account or "results" not in account["nrql"]:
+            return pd.DataFrame()
+
+        results = account["nrql"]["results"]
+        if not results:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(results)
         df["Customer"] = name
         df.rename(columns={"entity.name": "Entity"}, inplace=True)
-    return df
+        return df
+
+    except Exception:
+        st.warning(f"⚠️ Failed to load alerts for **{name}**")
+        return pd.DataFrame()
 
 # ---------------- LOAD DATA ----------------
 all_rows = []
@@ -225,7 +245,7 @@ c2.metric("Active Alerts", len(df[df.Status == "Active"]))
 
 st.divider()
 
-# ---------------- ALERTS BY CUSTOMER (CLICKABLE IMAGE CARDS) ----------------
+# ---------------- ALERTS BY CUSTOMER ----------------
 if customer == "All Customers":
     st.markdown("### Alerts by Customer")
     counts = df["Customer"].value_counts()
@@ -236,14 +256,11 @@ if customer == "All Customers":
 
         for j, (cust, cnt) in enumerate(list(counts.items())[i:i + cols_per_row]):
             with cols[j]:
-                # invisible button controls navigation
                 if st.button(" ", key=f"nav_{cust}", use_container_width=True):
                     st.session_state.navigate_to_customer = cust
                     st.rerun()
 
-                # visual card
                 st.markdown('<div class="customer-card">', unsafe_allow_html=True)
-
                 st.markdown('<div class="customer-logo-wrapper">', unsafe_allow_html=True)
                 img = CUSTOMER_IMAGES.get(cust)
                 if img:
@@ -252,5 +269,27 @@ if customer == "All Customers":
 
                 st.markdown(f'<div class="customer-count">{cnt}</div>', unsafe_allow_html=True)
                 st.markdown(f'<div class="customer-name">{cust}</div>', unsafe_allow_html=True)
-
                 st.markdown('</div>', unsafe_allow_html=True)
+
+st.divider()
+
+# ---------------- ENTITY GROUPING (DO NOT REMOVE) ----------------
+st.markdown("### 🔎 Alerts Grouped by Condition & Entity")
+
+conditions = df["conditionName"].value_counts()
+
+for cond, cnt in conditions.items():
+    with st.expander(f"{cond} ({cnt} alerts)"):
+        subset = df[df["conditionName"] == cond]
+
+        entity_summary = (
+            subset.groupby("Entity")
+            .agg(
+                Alerts=("incidentId", "count"),
+                Active=("Status", lambda x: (x == "Active").sum())
+            )
+            .reset_index()
+            .sort_values("Alerts", ascending=False)
+        )
+
+        st.dataframe(entity_summary, use_container_width=True, hide_index=True)
