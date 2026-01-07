@@ -313,7 +313,10 @@ else:
 
 # ---------------- HEADER ----------------
 st.markdown("## 🔥 Quickplay Alerts")
-st.caption("Click a customer to drill down")
+if st.session_state.clicked_customer:
+    st.caption(f"Viewing: {st.session_state.clicked_customer}")
+else:
+    st.caption("Click a customer to view details")
 st.divider()
 
 df = st.session_state.alerts
@@ -325,10 +328,59 @@ if df.empty:
 df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
-    st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
-    if st.button("🔄 Reset to All Customers"):
-        st.session_state.clicked_customer = None
-        st.rerun()
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
+    with col2:
+        if st.button("🔄 Reset", use_container_width=True):
+            st.session_state.clicked_customer = None
+            st.rerun()
+else:
+    # Show customer cards only when viewing all
+    st.markdown("### Alerts by Customer")
+    
+    customer_counts = df["Customer"].value_counts().sort_values(ascending=False)
+    
+    cols_per_row = 3
+    
+    for i in range(0, len(customer_counts), cols_per_row):
+        cols = st.columns(cols_per_row)
+        
+        for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
+            with cols[j]:
+                if st.button(
+                    f"",
+                    key=f"card_{cust_name}",
+                    use_container_width=True,
+                    help=f"Click to view {cust_name} details"
+                ):
+                    st.session_state.clicked_customer = cust_name
+                    st.rerun()
+                
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
+                    border-radius: 12px;
+                    padding: 20px;
+                    text-align: center;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    color: white;
+                    min-height: 200px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                ">
+                    <div style="font-size: 32px; font-weight: bold; margin-bottom: 10px;">{count}</div>
+                    <div style="font-size: 12px; opacity: 0.9;">Alerts</div>
+                    <div style="font-size: 16px; font-weight: bold; margin-top: 20px;">{cust_name}</div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    st.divider()
+    st.stop()
+
+# ---- ONLY SHOW THIS WHEN A CUSTOMER IS SELECTED ----
 
 # ---------------- KPIs ----------------
 c1, c2 = st.columns(2)
@@ -417,8 +469,6 @@ if customer == "All Customers":
                     <div style="font-size: 16px; font-weight: bold; margin-top: 20px;">{cust_name}</div>
                 </div>
                 """, unsafe_allow_html=True)
-
-st.divider()
 
 # ---------------- ENTITY BREAKDOWN ----------------
 st.markdown("### Alert Details by Condition")
