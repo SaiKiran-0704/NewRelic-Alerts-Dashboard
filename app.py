@@ -81,7 +81,7 @@ CUSTOMER_LOGOS = {
     "gotham sports": "logos/gotham_sports.png",
     "univision": "logos/univision.png",
     "local now": "logos/local_now.png",
-   
+}
 
 # ---------------- HELPERS ----------------
 def format_duration(td):
