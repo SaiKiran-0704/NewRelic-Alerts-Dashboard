@@ -22,7 +22,7 @@ st.markdown("""
         display: none !important;
     }
     
-    /* Permanent Sidebar with Dark Theme (Orange Removed) */
+    /* Permanent Sidebar with Dark Theme */
     section[data-testid="stSidebar"] {
         width: 400px !important;
         background-color: #161B22 !important;
@@ -30,15 +30,40 @@ st.markdown("""
         position: fixed;
     }
 
+    /* Sidebar Logo Styling */
+    .sidebar-logo-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .sidebar-logo-text { 
+        color: #F37021; 
+        font-weight: 800; 
+        font-size: 2.2rem; 
+        letter-spacing: -1.5px;
+    }
+
+    /* Center Header Styling */
+    .center-header {
+        text-align: center;
+        color: #F37021;
+        font-weight: 800;
+        font-size: 3.5rem;
+        margin-top: 0px;
+        margin-bottom: 10px;
+    }
+    
+    .block-container { padding-top: 1rem; }
+
     /* Adjust Main Content */
     section.main {
         margin-left: 50px;
     }
     
-    /* Sidebar Text & Label Enhancement (Light Text on Dark) */
+    /* Sidebar Text & Label Enhancement */
     [data-testid="stSidebar"] .stText, 
     [data-testid="stSidebar"] label, 
-    [data-testid="stSidebar"] .stCaption,
     [data-testid="stSidebar"] p {
         color: #E6E6E6 !important;
         font-size: 1.2rem !important;
@@ -54,24 +79,6 @@ st.markdown("""
         border: 1px solid #30363D !important;
         padding: 8px;
     }
-
-    /* Top Logo/Header Styling */
-    .logo-container {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        margin-bottom: 5px;
-    }
-    .logo-text { 
-        color: #F37021; 
-        font-weight: 800; 
-        font-size: 4rem; 
-        letter-spacing: -3px;
-        margin: 0;
-    }
-    .logo-icon { font-size: 3.5rem; }
-    
-    .block-container { padding-top: 2rem; }
 
     /* Key Metric Card Styling */
     div[data-testid="stMetric"] {
@@ -101,10 +108,6 @@ st.markdown("""
         margin-top: 30px !important;
         width: 100%;
         transition: 0.3s;
-    }
-    [data-testid="stSidebar"] .stButton>button:hover {
-        background-color: #ff8533 !important;
-        transform: translateY(-2px);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -181,8 +184,13 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v2.6")
+    # Logo and Name at the top of Sidebar
+    st.markdown("""
+        <div class="sidebar-logo-container">
+            <span style="font-size: 2.2rem;">🔥</span>
+            <span class="sidebar-logo-text">quickplay</span>
+        </div>
+    """, unsafe_allow_html=True)
     st.divider()
     
     customer_selection = st.selectbox(
@@ -192,9 +200,7 @@ with st.sidebar:
     )
 
     status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
-
-    time_labels = ["6 Hours", "24 Hours", "7 Days", "30 Days"]
-    time_label = st.selectbox("Time Window", time_labels)
+    time_label = st.selectbox("Time Window", ["6 Hours", "24 Hours", "7 Days", "30 Days"])
 
     if st.button("🔄 Force Refresh Pulse"):
         st.cache_data.clear()
@@ -215,44 +221,27 @@ with st.spinner("Syncing Pulse Trends..."):
 if all_rows:
     raw = pd.concat(all_rows)
     raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
-    
     grouped = raw.groupby(["incidentId", "Customer", "conditionName", "priority", "Entity"]).agg(
         start_time=("timestamp", "min"),
         end_time=("timestamp", "max"),
         events=("event", "nunique")
     ).reset_index()
-    
     grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
-    
-    if status_choice != "All":
-        display_df = grouped[grouped["Status"] == status_choice].copy()
-    else:
-        display_df = grouped.copy()
-
+    display_df = grouped if status_choice == "All" else grouped[grouped["Status"] == status_choice]
     st.session_state.alerts = display_df.sort_values("start_time", ascending=False)
     st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
 else:
     st.session_state.alerts = pd.DataFrame()
 
 # ---------------- MAIN CONTENT ----------------
-st.markdown("""
-    <div class="logo-container">
-        <span class="logo-icon">🔥</span>
-        <h1 class="logo-text">quickplay</h1>
-    </div>
-""", unsafe_allow_html=True)
-
-st.markdown(f"<p style='font-size: 1.3rem; color: #8B949E;'>Viewing: <b>{customer_selection}</b> | Range: <b>{time_label}</b></p>", unsafe_allow_html=True)
+# Centered Title
+st.markdown('<h1 class="center-header">Pulse Monitoring</h1>', unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; font-size: 1.3rem; color: #8B949E;'>Viewing: <b>{customer_selection}</b> | Range: <b>{time_label}</b></p>", unsafe_allow_html=True)
 
 df = st.session_state.alerts
 
 # ---------------- PROMINENT KPI ROW ----------------
-card_titles = {
-    "6 Hours": "Avg Alerts per Hour",
-    "24 Hours": "Avg Alerts per Hour",
-    "7 Days": "Avg Alerts per Day",
-    "30 Days": "Avg Alerts per Week"
-}
+card_titles = {"6 Hours": "Avg Alerts / Hour", "24 Hours": "Avg Alerts / Hour", "7 Days": "Avg Alerts / Day", "30 Days": "Avg Alerts / Week"}
 card_title = card_titles.get(time_label, "Avg Alerts")
 
 curr_total = len(df)
@@ -264,12 +253,9 @@ total_delta_pct = calculate_percent_delta(curr_total, total_prev_count)
 avg_delta_pct = calculate_percent_delta(curr_avg, prev_avg)
 
 c1, c2, c3 = st.columns(3)
-with c1:
-    st.metric("Total Alerts", curr_total, delta=total_delta_pct, delta_color="inverse")
-with c2:
-    st.metric(card_title, f"{curr_avg:.1f}", delta=avg_delta_pct, delta_color="inverse")
-with c3:
-    st.metric("Resolution Rate", f"{res_rate:.0f}%")
+with c1: st.metric("Total Alerts", curr_total, delta=total_delta_pct, delta_color="inverse")
+with c2: st.metric(card_title, f"{curr_avg:.1f}", delta=avg_delta_pct, delta_color="inverse")
+with c3: st.metric("Resolution Rate", f"{res_rate:.0f}%")
 
 st.divider()
 
@@ -291,20 +277,9 @@ if customer_selection == "All Customers":
 
 # ---------------- INCIDENT LOG ----------------
 st.subheader(f"Log: {status_choice} Alerts by Condition")
-
-conditions = df["conditionName"].value_counts().index
-for condition in conditions:
+for condition in df["conditionName"].value_counts().index:
     cond_df = df[df["conditionName"] == condition]
     with st.expander(f"📌 {condition} - {len(cond_df)} Alerts"):
-        entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
-        entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
-        st.dataframe(
-            entity_summary, 
-            hide_index=True, 
-            use_container_width=True,
-            column_config={
-                "Alert Count": st.column_config.NumberColumn("Alerts", format="%d 🚨")
-            }
-        )
+        st.dataframe(cond_df.groupby("Entity").size().reset_index(name="Alert Count").sort_values("Alert Count", ascending=False), hide_index=True, use_container_width=True)
 
 st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
