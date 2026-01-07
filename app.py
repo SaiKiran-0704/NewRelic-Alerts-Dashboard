@@ -1,17 +1,8 @@
-# Mapping of customer names to logo filenames
-CUSTOMER_LOGOS = {
-    "Aha": "Aha.png",
-    "canela": "canela.png",
-    "pLive": "plive.png",
-    "cignal": "cignal.jpeg",
-    "Tm": "tm.jpeg",
-    "gotham sports": "gotham_sports.jpeg",
-    "game": "gotham_sports.jpeg",
-    "univision": "unow.jpeg",
-    "local now": "localnow.png",
-    "amd": "localnow.png"
-}import os
-from PIL import Image
+import streamlit as st
+import requests
+import pandas as pd
+import datetime
+import altair as alt
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -433,29 +424,29 @@ if customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                # Get logo filename
-                logo_filename = CUSTOMER_LOGOS.get(cust_name)
-                
-                # Load and display logo
-                if logo_filename:
-                    logo_image = load_logo(logo_filename)
-                    if logo_image:
-                        st.image(logo_image, width=120, use_container_width=False)
-                    else:
-                        st.markdown("📊 Logo not found")
-                else:
-                    st.markdown("📊")
-                
-                # Display customer info
-                st.markdown(f"### {cust_name}")
-                st.markdown(f"## {count} Alerts")
+                # Create a container for the card with logo
+                with st.container():
+                    col_logo, col_info = st.columns([1, 2])
+                    
+                    with col_logo:
+                        logo_path = CUSTOMER_LOGOS.get(cust_name)
+                        if logo_path:
+                            try:
+                                st.image(logo_path, width=80, use_container_width=False)
+                            except:
+                                st.markdown("📊")
+                        else:
+                            st.markdown("📊")
+                    
+                    with col_info:
+                        st.markdown(f"<div style='font-size: 18px; font-weight: bold;'>{cust_name}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-size: 32px; font-weight: bold; color: #FF9F1C;'>{count}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='font-size: 12px;'>Alerts</div>", unsafe_allow_html=True)
                 
                 # Button to drill down
-                if st.button(f"View Details", key=f"btn_{cust_name}", use_container_width=True):
+                if st.button(f"View {cust_name}", key=f"btn_{cust_name}", use_container_width=True):
                     st.session_state.clicked_customer = cust_name
                     st.rerun()
-                
-                st.divider()
 
 st.divider()
 
