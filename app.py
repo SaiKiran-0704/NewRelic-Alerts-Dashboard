@@ -165,15 +165,14 @@ if df.empty:
     st.stop()
 
 # ---------------- KPI ROW ----------------
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3 = st.columns(3)
 c1.metric("Total Alerts", len(df))
-c2.metric("Active Alerts", len(df[df.Status == "Active"]))
-c3.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
-c4.metric("Resolution Rate", get_resolution_rate(df))
+c2.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
+c3.metric("Resolution Rate", get_resolution_rate(df))
 
 st.divider()
 
-# ---------------- CLIENT TILES (ONLY ON ALL VIEW) ----------------
+# ---------------- CLIENT TILES ----------------
 if customer == "All Customers":
     st.subheader("Client Health Overview")
     counts = df["Customer"].value_counts()
@@ -188,21 +187,16 @@ if customer == "All Customers":
 # ---------------- HIERARCHICAL INCIDENT LOG ----------------
 st.subheader("📋 Alerts by Condition & Entity")
 
-# Group alerts by Condition Name (Sorted by most active alerts)
-conditions = df.groupby("conditionName").apply(
-    lambda x: (x["Status"] == "Active").sum()
-).sort_values(ascending=False).index
+# Group alerts by Condition Name (Sorted by volume)
+conditions = df["conditionName"].value_counts().index
 
 for condition in conditions:
     cond_df = df[df["conditionName"] == condition]
-    active_in_cond = len(cond_df[cond_df.Status == "Active"])
-    status_icon = "🔴" if active_in_cond > 0 else "🟢"
     
-    # Header for the Condition Name
-    with st.expander(f"{status_icon} **{condition}** — {len(cond_df)} Total Alerts ({active_in_cond} Active)"):
+    # Header for the Condition Name - Simplified
+    with st.expander(f"**{condition}** — {len(cond_df)} Total Alerts"):
         
-        # Entity Summary Table (The "Drop-down" content)
-        # Groups by Entity and counts alerts for this specific condition
+        # Entity Summary Table
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
         entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
         
