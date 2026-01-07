@@ -1,10 +1,20 @@
-import streamlit as st
-import requests
-import pandas as pd
-import datetime
-import altair as alt
+import os
+from PIL import Image
 
-# ---------------- PAGE CONFIG ----------------
+# Load logo function
+def load_logo(logo_filename):
+    """Load logo image from logos folder"""
+    logo_path = f"logos/{logo_filename}"
+    try:
+        if os.path.exists(logo_path):
+            return Image.open(logo_path)
+    except:
+        pass
+    return None
+import os
+from PIL import Image
+
+# ---- MUST BE FIRST ----
 st.set_page_config(
     page_title="Quickplay Alerts",
     layout="wide",
@@ -40,6 +50,20 @@ div[data-testid="stMetric"] {
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
 
+# Mapping of customer names to logo filenames
+CUSTOMER_LOGOS = {
+    "Aha": "Aha.png",
+    "canela": "canela.png",
+    "pLive": "plive.png",
+    "cignal": "cignal.jpeg",
+    "Tm": "tm.jpeg",
+    "gotham sports": "gotham_sports.jpeg",
+    "game": "gotham_sports.jpeg",
+    "univision": "unow.jpeg",
+    "local now": "localnow.png",
+    "amd": "localnow.png"
+}
+
 # ---------------- SESSION STATE ----------------
 if "alerts" not in st.session_state:
     st.session_state.alerts = None
@@ -71,19 +95,8 @@ with st.sidebar:
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
-# Mapping of customer names to logo file paths
-CUSTOMER_LOGOS = {
-    "Aha": "logos/aha.png",
-    "canela": "logos/canela.png",
-    "pLive": "logos/plive.png",
-    "cignal": "logos/cignal.png",
-    "Tm": "logos/tm.png",
-    "gotham sports": "logos/gotham_sports.png",
-    "game": "logos/gotham_sports.png",
-    "univision": "logos/univision.png",
-    "local now": "logos/local_now.png",
-    "amd": "logos/local_now.png"
-}
+if customer != "All Customers":
+    st.session_state.clicked_customer = None
 
 # ---------------- HELPERS ----------------
 def format_duration(td):
@@ -96,6 +109,16 @@ def format_duration(td):
 
 def style_status(v):
     return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
+
+def load_logo(logo_filename):
+    """Load logo image from logos folder"""
+    logo_path = f"logos/{logo_filename}"
+    try:
+        if os.path.exists(logo_path):
+            return Image.open(logo_path)
+    except Exception as e:
+        pass
+    return None
 
 def count_alerts_for_period(name, api_key, account_id, time_clause):
     """Count total alerts for a given time period"""
@@ -123,23 +146,6 @@ def count_alerts_for_period(name, api_key, account_id, time_clause):
         pass
     return 0
 
-def generate_summary(df):
-    """Generate alert summary"""
-    if df.empty:
-        return "No alerts in this period"
-    
-    total = len(df)
-    active = len(df[df["Status"] == "Active"])
-    closed = len(df[df["Status"] == "Closed"])
-    critical = len(df[df["priority"] == "CRITICAL"])
-    
-    summary = f"""**Alert Summary:**
-- Total Alerts: {total}
-- Active Now: {active}
-- Resolved: {closed}
-- Critical: {critical}"""
-    return summary
-
 def calculate_mttr(df):
     """Calculate Mean Time To Resolution"""
     if df.empty:
@@ -151,7 +157,6 @@ def calculate_mttr(df):
     
     durations = []
     for duration_str in closed_alerts["Duration"]:
-        # Parse duration string like "2h 30m" or "45m" etc
         try:
             total_minutes = 0
             parts = duration_str.split()
@@ -228,8 +233,6 @@ def calculate_alert_trend(df_current, time_label):
     
     current_count = len(df_current)
     
-    # This is a simplified trend - in production you'd fetch previous period data
-    # For now, we'll show a baseline calculation
     if current_count > 100:
         return "High volume"
     elif current_count > 50:
@@ -253,7 +256,6 @@ def generate_better_insights(df, time_label):
     active = len(df[df["Status"] == "Active"])
     resolved = len(df[df["Status"] == "Closed"])
     
-    # Get top condition
     top_condition = "N/A"
     if "conditionName" in df.columns and not df["conditionName"].empty:
         top_cond = df["conditionName"].value_counts().iloc[0]
@@ -261,7 +263,6 @@ def generate_better_insights(df, time_label):
     
     recommendations = []
     
-    # Generate recommendations based on metrics
     if active / total > 0.5:
         recommendations.append("🎯 High active rate (>50%) - Consider tuning alert thresholds")
     
@@ -375,7 +376,6 @@ st.markdown("### 📊 Alert Metrics & Analysis")
 
 metrics = generate_better_insights(df_view, time_label)
 
-# Display key metrics in columns
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -416,7 +416,6 @@ if customer == "All Customers":
     
     customer_counts = df["Customer"].value_counts().sort_values(ascending=False)
     
-    # Create cards in rows (3 cards per row)
     cols_per_row = 3
     
     for i in range(0, len(customer_counts), cols_per_row):
@@ -424,38 +423,39 @@ if customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                # Get logo URL for customer
-                logo_url = CUSTOMER_LOGOS.get(cust_name, "https://via.placeholder.com/150/FF9F1C/FFFFFF?text=Logo")
-                
-                # Card styling with logo
-                card_html = f"""
+                st.markdown(f"""
                 <div style="
                     background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
-                    border-radius: 12px;
-                    padding: 20px;
+                    border-radius: 15px;
+                    padding: 30px 20px;
                     text-align: center;
-                    cursor: pointer;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    transition: transform 0.2s;
-                    color: white;
-                    min-height: 200px;
+                    min-height: 220px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
                     align-items: center;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
                 ">
-                    <img src="{logo_url}" style="height: 60px; margin-bottom: 15px; object-fit: contain;">
-                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">{cust_name}</div>
-                    <div style="font-size: 32px; font-weight: bold;">{count}</div>
-                    <div style="font-size: 12px; margin-top: 8px; opacity: 0.9;">Alerts</div>
+                    <div style="font-size: 48px; font-weight: bold; color: white; margin-bottom: 20px;">
+                        {count}
+                    </div>
+                    <div style="font-size: 14px; color: white; opacity: 0.9;">
+                        Alerts
+                    </div>
                 </div>
-                """
-                st.markdown(card_html, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
                 
-                # Button to drill down
-                if st.button(f"View {cust_name}", key=f"btn_{cust_name}"):
+                logo_filename = CUSTOMER_LOGOS.get(cust_name)
+                if logo_filename:
+                    logo_image = load_logo(logo_filename)
+                    if logo_image:
+                        st.image(logo_image, use_container_width=True)
+                
+                if st.button(f"View {cust_name}", key=f"btn_{cust_name}", use_container_width=True):
                     st.session_state.clicked_customer = cust_name
                     st.rerun()
+                
+                st.markdown("---")
 
 st.divider()
 
@@ -466,7 +466,6 @@ top_conditions = df_view["conditionName"].value_counts()
 for cond, cnt in top_conditions.items():
     with st.expander(f"{cond} ({cnt})"):
         subset = df_view[df_view["conditionName"] == cond]
-        # Group by Entity and count occurrences
         entity_summary = subset.groupby("Entity").size().reset_index(name="Count")
         entity_summary = entity_summary.sort_values("Count", ascending=False)
         st.dataframe(entity_summary, use_container_width=True, hide_index=True)
