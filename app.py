@@ -14,15 +14,12 @@ st.set_page_config(
 # ---------------- ADVANCED VISUAL BRANDING & PERMANENT SIDEBAR (CSS) ----------------
 st.markdown("""
 <style>
-    /* Main App Background */
     .stApp { background-color:#0A0C10; color:#E6E6E6; }
     
-    /* REMOVE COLLAPSE ACTION & MAKE SIDEBAR PERMANENT */
     button[kind="headerNoPadding"] {
         display: none !important;
     }
     
-    /* Permanent Sidebar with Dark Theme */
     section[data-testid="stSidebar"] {
         width: 400px !important;
         background-color: #161B22 !important;
@@ -30,7 +27,6 @@ st.markdown("""
         position: fixed;
     }
 
-    /* Sidebar Logo Styling */
     .sidebar-logo-container {
         display: flex;
         align-items: center;
@@ -44,7 +40,6 @@ st.markdown("""
         letter-spacing: -1.5px;
     }
 
-    /* Center Header Styling - Pulse Monitoring now Orange */
     .center-header {
         text-align: center;
         color: #F37021; 
@@ -56,12 +51,10 @@ st.markdown("""
     
     .block-container { padding-top: 1rem; }
 
-    /* Adjust Main Content */
     section.main {
         margin-left: 50px;
     }
     
-    /* Sidebar Text & Label Enhancement */
     [data-testid="stSidebar"] .stText, 
     [data-testid="stSidebar"] label, 
     [data-testid="stSidebar"] p {
@@ -71,7 +64,6 @@ st.markdown("""
         margin-bottom: 12px !important;
     }
 
-    /* Glassmorphism for Sidebar Widgets */
     [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"],
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
         background-color: #0A0C10 !important;
@@ -80,7 +72,6 @@ st.markdown("""
         padding: 8px;
     }
 
-    /* Key Metric Card Styling */
     div[data-testid="stMetric"] {
         background-color:#161B22;
         border: 1px solid #30363D;
@@ -89,14 +80,12 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
 
-    /* Prominent Metric Numbers */
     div[data-testid="stMetricValue"] > div {
         font-size: 3.2rem !important;
         font-weight: 800 !important;
         color: #FFFFFF !important;
     }
 
-    /* Sidebar Action Button */
     [data-testid="stSidebar"] .stButton>button {
         background-color: #F37021 !important;
         border: none !important;
@@ -137,6 +126,10 @@ def get_dynamic_avg_value(count, time_label):
         return count / 7
     elif "30 Days" in time_label:
         return count / 4 
+    elif "60 Days" in time_label:
+        return count / 8
+    elif "90 Days" in time_label:
+        return count / 12
     return float(count)
 
 def get_resolution_rate(df):
@@ -155,7 +148,9 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
         "6 Hours": ("SINCE 6 hours ago", "SINCE 12 hours ago UNTIL 6 hours ago"),
         "24 Hours": ("SINCE 24 hours ago", "SINCE 48 hours ago UNTIL 24 hours ago"),
         "7 Days": ("SINCE 7 days ago", "SINCE 14 days ago UNTIL 7 days ago"),
-        "30 Days": ("SINCE 30 days ago", "SINCE 60 days ago UNTIL 30 days ago")
+        "30 Days": ("SINCE 30 days ago", "SINCE 60 days ago UNTIL 30 days ago"),
+        "60 Days": ("SINCE 60 days ago", "SINCE 120 days ago UNTIL 60 days ago"),
+        "90 Days": ("SINCE 90 days ago", "SINCE 180 days ago UNTIL 90 days ago")
     }
     curr_clause, prev_clause = time_map_history[time_label]
     
@@ -193,13 +188,15 @@ with st.sidebar:
     st.divider()
     
     customer_selection = st.selectbox(
-        "Client Selector",
+        "Customer", # Renamed from Client Selector
         ["All Customers"] + list(CLIENTS.keys()),
         key="customer_filter"
     )
 
     status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
-    time_label = st.selectbox("Time Window", ["6 Hours", "24 Hours", "7 Days", "30 Days"])
+    
+    # Updated Time Window upto 3 months
+    time_label = st.selectbox("Time Window", ["6 Hours", "24 Hours", "7 Days", "30 Days", "60 Days", "90 Days"])
 
     if st.button("🔄 Force Refresh Pulse"):
         st.cache_data.clear()
@@ -233,15 +230,19 @@ else:
     st.session_state.alerts = pd.DataFrame()
 
 # ---------------- MAIN CONTENT ----------------
-# Centered Title (Color set in CSS)
 st.markdown('<h1 class="center-header">Pulse Monitoring</h1>', unsafe_allow_html=True)
-
-# Viewing and Range display removed as requested
 
 df = st.session_state.alerts
 
 # ---------------- PROMINENT KPI ROW ----------------
-card_titles = {"6 Hours": "Avg Alerts / Hour", "24 Hours": "Avg Alerts / Hour", "7 Days": "Avg Alerts / Day", "30 Days": "Avg Alerts / Week"}
+card_titles = {
+    "6 Hours": "Avg Alerts / Hour", 
+    "24 Hours": "Avg Alerts / Hour", 
+    "7 Days": "Avg Alerts / Day", 
+    "30 Days": "Avg Alerts / Week",
+    "60 Days": "Avg Alerts / Week",
+    "90 Days": "Avg Alerts / Week"
+}
 card_title = card_titles.get(time_label, "Avg Alerts")
 
 curr_total = len(df)
@@ -265,7 +266,6 @@ if df.empty:
 
 # ---------------- CLIENT TILES ----------------
 if customer_selection == "All Customers":
-    # Renamed from Regional Health Status to Alerts by customer
     st.subheader("Alerts by customer")
     counts = df["Customer"].value_counts()
     cols = st.columns(4)
