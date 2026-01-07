@@ -71,7 +71,7 @@ with st.sidebar:
     if st.session_state.updated:
         st.caption(f"Updated at {st.session_state.updated}")
 
-# Mapping of customer names to image URLs
+# Mapping of customer names to logo file paths
 CUSTOMER_LOGOS = {
     "Aha": "logos/aha.png",
     "canela": "logos/canela.png",
@@ -79,8 +79,10 @@ CUSTOMER_LOGOS = {
     "cignal": "logos/cignal.png",
     "Tm": "logos/tm.png",
     "gotham sports": "logos/gotham_sports.png",
+    "game": "logos/gotham_sports.png",
     "univision": "logos/univision.png",
     "local now": "logos/local_now.png",
+    "amd": "logos/local_now.png"
 }
 
 # ---------------- HELPERS ----------------
