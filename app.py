@@ -14,7 +14,25 @@ st.set_page_config(
 st.markdown("""
 <style>
     .stApp { background-color:#0F1115; color:#E6E6E6; }
-    .main-header { color: #F37021; font-weight: 800; margin-bottom: 0px; }
+    
+    /* Prominent Top Logo/Header Styling */
+    .logo-container {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 5px;
+    }
+    .logo-text { 
+        color: #F37021; 
+        font-weight: 800; 
+        font-size: 3.5rem; 
+        letter-spacing: -2px;
+        margin: 0;
+    }
+    .logo-icon {
+        font-size: 3rem;
+    }
+    
     .block-container { padding-top: 2rem; }
 
     /* Key Metric Card Styling */
@@ -140,8 +158,8 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v2.1")
+    # Logo removed from here
+    st.caption("Pulse Monitoring v2.2")
     st.divider()
     
     customer_selection = st.selectbox(
@@ -194,13 +212,19 @@ else:
     st.session_state.alerts = pd.DataFrame()
 
 # ---------------- MAIN CONTENT ----------------
-st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
+# New prominent logo and title at the top
+st.markdown("""
+    <div class="logo-container">
+        <span class="logo-icon">🔥</span>
+        <h1 class="logo-text">quickplay</h1>
+    </div>
+""", unsafe_allow_html=True)
+
 st.markdown(f"Viewing: {customer_selection} | Range: {time_label}")
 
 df = st.session_state.alerts
 
 # ---------------- PROMINENT KPI ROW ----------------
-# UI Diagram showing Hierarchy: 
 card_titles = {
     "6 Hours": "Avg Alerts per Hour",
     "24 Hours": "Avg Alerts per Hour",
@@ -217,7 +241,6 @@ res_rate = get_resolution_rate(df)
 total_delta_pct = calculate_percent_delta(curr_total, total_prev_count)
 avg_delta_pct = calculate_percent_delta(curr_avg, prev_avg)
 
-# Display Metrics
 c1, c2, c3 = st.columns(3)
 with c1:
     st.metric("Total Alerts", curr_total, delta=total_delta_pct, delta_color="inverse")
