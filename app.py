@@ -8,7 +8,7 @@ st.set_page_config(
     page_title="Quickplay Pulse",
     layout="wide",
     page_icon="🔥",
-    initial_sidebar_state="expanded" # Force it open on load
+    initial_sidebar_state="expanded" 
 )
 
 # ---------------- ADVANCED VISUAL BRANDING & PERMANENT SIDEBAR (CSS) ----------------
@@ -18,30 +18,29 @@ st.markdown("""
     .stApp { background-color:#0A0C10; color:#E6E6E6; }
     
     /* REMOVE COLLAPSE ACTION & MAKE SIDEBAR PERMANENT */
-    /* This hides the "<<" toggle button shown in your image */
     button[kind="headerNoPadding"] {
         display: none !important;
     }
     
-    /* Increase Sidebar Width and Style */
+    /* Permanent Sidebar with Dark Theme (Orange Removed) */
     section[data-testid="stSidebar"] {
         width: 400px !important;
-        background-color: #F37021 !important;
-        border-right: 1px solid rgba(0,0,0,0.1);
-        position: fixed; /* Keep it locked */
+        background-color: #161B22 !important;
+        border-right: 1px solid #30363D;
+        position: fixed;
     }
 
-    /* Adjust Main Content to accommodate the wide, permanent sidebar */
+    /* Adjust Main Content */
     section.main {
         margin-left: 50px;
     }
     
-    /* Sidebar Text & Label Enhancement */
+    /* Sidebar Text & Label Enhancement (Light Text on Dark) */
     [data-testid="stSidebar"] .stText, 
     [data-testid="stSidebar"] label, 
     [data-testid="stSidebar"] .stCaption,
     [data-testid="stSidebar"] p {
-        color: #0F1115 !important;
+        color: #E6E6E6 !important;
         font-size: 1.2rem !important;
         font-weight: 700 !important;
         margin-bottom: 12px !important;
@@ -50,9 +49,9 @@ st.markdown("""
     /* Glassmorphism for Sidebar Widgets */
     [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"],
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
-        background-color: rgba(15, 17, 21, 0.15) !important;
+        background-color: #0A0C10 !important;
         border-radius: 12px !important;
-        border: 1px solid rgba(15, 17, 21, 0.2) !important;
+        border: 1px solid #30363D !important;
         padding: 8px;
     }
 
@@ -90,9 +89,9 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* Sidebar Buttons */
+    /* Sidebar Action Button */
     [data-testid="stSidebar"] .stButton>button {
-        background-color: #0F1115 !important;
+        background-color: #F37021 !important;
         border: none !important;
         color: white !important;
         font-size: 1.1rem !important;
@@ -104,7 +103,7 @@ st.markdown("""
         transition: 0.3s;
     }
     [data-testid="stSidebar"] .stButton>button:hover {
-        background-color: #1C2128 !important;
+        background-color: #ff8533 !important;
         transform: translateY(-2px);
     }
 </style>
@@ -183,7 +182,7 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v2.5")
+    st.caption("Pulse Monitoring v2.6")
     st.divider()
     
     customer_selection = st.selectbox(
