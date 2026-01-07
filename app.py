@@ -424,10 +424,10 @@ if customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                # Get logo URL for customer
-                logo_url = CUSTOMER_LOGOS.get(cust_name, "https://via.placeholder.com/150/FF9F1C/FFFFFF?text=Logo")
+                # Get logo path for customer
+                logo_path = CUSTOMER_LOGOS.get(cust_name)
                 
-                # Card styling with logo
+                # Card styling with logo using Streamlit
                 card_html = f"""
                 <div style="
                     background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
@@ -436,21 +436,26 @@ if customer == "All Customers":
                     text-align: center;
                     cursor: pointer;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    transition: transform 0.2s;
                     color: white;
-                    min-height: 200px;
+                    min-height: 180px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
                     align-items: center;
                 ">
-                    <img src="{logo_url}" style="height: 60px; margin-bottom: 15px; object-fit: contain;">
                     <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">{cust_name}</div>
                     <div style="font-size: 32px; font-weight: bold;">{count}</div>
                     <div style="font-size: 12px; margin-top: 8px; opacity: 0.9;">Alerts</div>
                 </div>
                 """
                 st.markdown(card_html, unsafe_allow_html=True)
+                
+                # Display logo using Streamlit (if path exists)
+                if logo_path:
+                    try:
+                        st.image(logo_path, width=100)
+                    except:
+                        st.markdown("📊")
                 
                 # Button to drill down
                 if st.button(f"View {cust_name}", key=f"btn_{cust_name}"):
