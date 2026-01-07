@@ -241,4 +241,4 @@ for condition in conditions:
             }
         )
 
-st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
+st.caption(f"Last sync: {st.session_state.updated}")
