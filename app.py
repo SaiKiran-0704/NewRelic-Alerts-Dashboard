@@ -73,16 +73,16 @@ with st.sidebar:
 
 # Mapping of customer names to image URLs
 CUSTOMER_LOGOS = {
-    "Aha": "https://via.placeholder.com/150/FF7A3F/FFFFFF?text=Aha",
-    "canela": "https://via.placeholder.com/150/DC143C/FFFFFF?text=Canela",
-    "pLive": "https://via.placeholder.com/150/1A1A1A/FFFFFF?text=pLive",
-    "cignal": "https://via.placeholder.com/150/DC143C/FFFFFF?text=Cignal",
-    "Tm": "https://via.placeholder.com/150/0052CC/FFFFFF?text=TM",
-    "gotham sports": "https://via.placeholder.com/150/1A1A1A/FFFFFF?text=GS",
-    "game": "https://via.placeholder.com/150/1A1A1A/FFFFFF?text=GS",
-    "univision": "https://via.placeholder.com/150/FFFFFF/000000?text=Univision",
-    "local now": "https://via.placeholder.com/150/1A3A3A/00FF00?text=LocalNow",
-    "amd": "https://via.placeholder.com/150/1A3A3A/00FF00?text=LocalNow"
+    "Aha": "logos/aha.png",
+    "canela": "logos/canela.png",
+    "pLive": "logos/plive.png",
+    "cignal": "logos/cignal.png",
+    "Tm": "logos/tm.png",
+    "gotham sports": "logos/gotham_sports.png",
+    "game": "logos/gotham_sports.png",
+    "univision": "logos/univision.png",
+    "local now": "logos/local_now.png",
+    "amd": "logos/local_now.png"
 }
 
 # ---------------- HELPERS ----------------
