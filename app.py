@@ -348,6 +348,15 @@ if df.empty:
 df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
+    
+    # Show reset button when viewing a specific customer
+    col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
+    with col_reset2:
+        if st.button("← Back to All Customers", use_container_width=True, type="primary"):
+            st.session_state.clicked_customer = None
+            st.rerun()
+    
+    st.divider()
 
 # ---------------- KPIs ----------------
 c1, c2 = st.columns(2)
