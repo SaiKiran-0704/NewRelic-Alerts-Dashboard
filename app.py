@@ -10,21 +10,7 @@ CUSTOMER_LOGOS = {
     "univision": "unow.jpeg",
     "local now": "localnow.png",
     "amd": "localnow.png"
-}# Mapping of customer names to logo filenames
-CUSTOMER_LOGOS = {
-    "Aha": "Aha.png",
-    "canela": "canela.png",
-    "pLive": "plive.png",
-    "cignal": "cignal.jpeg",
-    "Tm": "tm.jpeg",
-    "gotham sports": "gotham_sports.jpeg",
-    "game": "gotham_sports.jpeg",
-    "univision": "unow.jpeg",
-    "local now": "localnow.png",
-    "amd": "localnow.png"
-}
-
-import os
+}import os
 from PIL import Image
 
 # ---------------- PAGE CONFIG ----------------
@@ -447,64 +433,29 @@ if customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                # Create card with logo and alert count
-                card_container = st.container()
+                # Get logo filename
+                logo_filename = CUSTOMER_LOGOS.get(cust_name)
                 
-                with card_container:
-                    # Get logo filename
-                    logo_filename = CUSTOMER_LOGOS.get(cust_name)
-                    
-                    # Display card with orange background
-                    st.markdown(f"""
-                    <div style="
-                        background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
-                        border-radius: 15px;
-                        padding: 30px 20px;
-                        text-align: center;
-                        min-height: 220px;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: space-between;
-                        align-items: center;
-                        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-                    ">
-                    """, unsafe_allow_html=True)
-                    
-                    # Load and display logo
-                    col1, col2, col3 = st.columns([1, 1, 1])
-                    with col2:
-                        if logo_filename:
-                            logo_image = load_logo(logo_filename)
-                            if logo_image:
-                                st.image(logo_image, use_container_width=True)
-                    
-                    # Display alert count on top of logo
-                    st.markdown(f"""
-                    <div style="
-                        font-size: 48px;
-                        font-weight: bold;
-                        color: white;
-                        margin-top: 20px;
-                    ">
-                    {count}
-                    </div>
-                    <div style="
-                        font-size: 16px;
-                        color: white;
-                        opacity: 0.9;
-                    ">
-                    Alerts
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.markdown("</div>", unsafe_allow_html=True)
-                    
-                    # Button to drill down
-                    if st.button(f"View {cust_name}", key=f"btn_{cust_name}", use_container_width=True):
-                        st.session_state.clicked_customer = cust_name
-                        st.rerun()
-                    
-                    st.markdown("---")
+                # Load and display logo
+                if logo_filename:
+                    logo_image = load_logo(logo_filename)
+                    if logo_image:
+                        st.image(logo_image, width=120, use_container_width=False)
+                    else:
+                        st.markdown("📊 Logo not found")
+                else:
+                    st.markdown("📊")
+                
+                # Display customer info
+                st.markdown(f"### {cust_name}")
+                st.markdown(f"## {count} Alerts")
+                
+                # Button to drill down
+                if st.button(f"View Details", key=f"btn_{cust_name}", use_container_width=True):
+                    st.session_state.clicked_customer = cust_name
+                    st.rerun()
+                
+                st.divider()
 
 st.divider()
 
