@@ -30,6 +30,7 @@ st.markdown("""
         background-color: #161B22 !important;
         border: 1px solid #30363D !important;
         border-radius: 5px;
+        font-size: 1.1rem;
     }
 
     /* Button Grid for Customers */
@@ -70,8 +71,6 @@ def format_duration(td):
 def calculate_mttr(df):
     closed = df[df["Status"] == "Closed"]
     if closed.empty: return "N/A"
-    
-    # Accurate MTTR calculation using vectorized timestamps
     durations = (closed['end_time'] - closed['start_time']).dt.total_seconds() / 60
     avg = durations.mean()
     return f"{int(avg//60)}h {int(avg%60)}m" if avg >= 60 else f"{int(avg)}m"
@@ -141,7 +140,6 @@ if all_rows:
     raw = pd.concat(all_rows)
     raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
     
-    # Logic to collapse Open/Close events into single Incidents
     grouped = raw.groupby(["incidentId", "Customer", "conditionName", "priority", "Entity"]).agg(
         start_time=("timestamp", "min"),
         end_time=("timestamp", "max"),
@@ -175,7 +173,7 @@ c4.metric("Resolution Rate", get_resolution_rate(df))
 
 st.divider()
 
-# ---------------- CLIENT TILES ----------------
+# ---------------- CLIENT TILES (ONLY ON ALL VIEW) ----------------
 if customer == "All Customers":
     st.subheader("Client Health Overview")
     counts = df["Customer"].value_counts()
@@ -190,19 +188,21 @@ if customer == "All Customers":
 # ---------------- HIERARCHICAL INCIDENT LOG ----------------
 st.subheader("📋 Alerts by Condition & Entity")
 
-# Group alerts by Condition Name
-conditions = df.sort_values("Status")["conditionName"].unique()
+# Group alerts by Condition Name (Sorted by most active alerts)
+conditions = df.groupby("conditionName").apply(
+    lambda x: (x["Status"] == "Active").sum()
+).sort_values(ascending=False).index
 
 for condition in conditions:
     cond_df = df[df["conditionName"] == condition]
     active_in_cond = len(cond_df[cond_df.Status == "Active"])
     status_icon = "🔴" if active_in_cond > 0 else "🟢"
     
-    # Header for the Condition
+    # Header for the Condition Name
     with st.expander(f"{status_icon} **{condition}** — {len(cond_df)} Total Alerts ({active_in_cond} Active)"):
         
-        # Nested Table: Entity Breakdown
-        st.markdown("### Entity Summary")
+        # Entity Summary Table (The "Drop-down" content)
+        # Groups by Entity and counts alerts for this specific condition
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
         entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
         
@@ -210,20 +210,11 @@ for condition in conditions:
             entity_summary, 
             hide_index=True, 
             use_container_width=True,
-            column_config={"Alert Count": st.column_config.NumberColumn(format="%d 🚨")}
-        )
-        
-        # Detailed Incident List for this Condition
-        st.markdown("### Incident History")
-        st.dataframe(
-            cond_df[["Status", "Customer", "Entity", "Duration", "start_time"]],
-            use_container_width=True,
-            hide_index=True,
             column_config={
-                "start_time": st.column_config.DatetimeColumn("Detected At", format="D MMM, HH:mm"),
-                "Status": st.column_config.TextColumn("Status")
+                "Entity": st.column_config.TextColumn("Impacted Entity"),
+                "Alert Count": st.column_config.NumberColumn("Total Alerts", format="%d 🚨")
             }
         )
 
 # ---------------- FOOTER ----------------
-st.caption(f"Pulse internal tool. Data cached for 5 minutes. Last sync: {st.session_state.updated}")
+st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
