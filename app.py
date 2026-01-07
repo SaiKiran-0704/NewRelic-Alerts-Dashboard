@@ -46,6 +46,13 @@ if "updated" not in st.session_state:
     st.session_state.updated = None
 if "customer_filter" not in st.session_state:
     st.session_state.customer_filter = "All Customers"
+if "navigate_to_customer" not in st.session_state:
+    st.session_state.navigate_to_customer = None
+
+# -------- SAFE NAVIGATION (MUST BE BEFORE SIDEBAR) --------
+if st.session_state.navigate_to_customer:
+    st.session_state.customer_filter = st.session_state.navigate_to_customer
+    st.session_state.navigate_to_customer = None
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
@@ -202,7 +209,7 @@ if customer == "All Customers":
                     key=f"card_{cust}",
                     use_container_width=True
                 ):
-                    st.session_state.customer_filter = cust
+                    st.session_state.navigate_to_customer = cust
                     st.rerun()
 
 st.divider()
