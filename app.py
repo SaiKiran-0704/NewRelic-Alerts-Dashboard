@@ -10,7 +10,7 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- CLEAN UI ----------------
+# ---------------- CLEAN UI + CARD CSS ----------------
 st.markdown("""
 <style>
 .stApp { background-color:#0F1115; color:#E6E6E6; }
@@ -33,26 +33,42 @@ div[data-testid="stMetric"] {
     border-radius:8px;
 }
 
+/* -------- CUSTOMER CARDS -------- */
 .customer-card {
-    background-color: #151821;
-    border: 1px solid #2A2F3A;
-    border-radius: 14px;
-    padding: 18px;
-    text-align: center;
+    background-color:#151821;
+    border:1px solid #2A2F3A;
+    border-radius:14px;
+    padding:16px;
+    text-align:center;
+    cursor:pointer;
 }
 
 .customer-card:hover {
-    border-color: #FF5C5C;
+    border-color:#FF5C5C;
+}
+
+.customer-logo-wrapper {
+    height:80px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin-bottom:10px;
+}
+
+.customer-logo-wrapper img {
+    max-height:70px;
+    max-width:120px;
+    object-fit:contain;
 }
 
 .customer-count {
-    font-size: 22px;
-    font-weight: 700;
+    font-size:22px;
+    font-weight:700;
 }
 
 .customer-name {
-    font-size: 14px;
-    opacity: 0.85;
+    font-size:14px;
+    opacity:0.85;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -61,9 +77,9 @@ div[data-testid="stMetric"] {
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
 
-# ---------------- CUSTOMER IMAGES ----------------
+# ---------------- CUSTOMER LOGOS ----------------
 CUSTOMER_IMAGES = {
-  "Aha": "logos/Aha.png",
+    "Aha": "logos/Aha.png",
     "PLIVE": "logos/plive.png",
     "CIGNAL": "logos/cignal.jpeg",
     "TM": "logos/tm.jpeg",
@@ -83,7 +99,7 @@ if "customer_filter" not in st.session_state:
 if "navigate_to_customer" not in st.session_state:
     st.session_state.navigate_to_customer = None
 
-# -------- SAFE NAVIGATION --------
+# -------- SAFE NAVIGATION (BEFORE SIDEBAR) --------
 if st.session_state.navigate_to_customer:
     st.session_state.customer_filter = st.session_state.navigate_to_customer
     st.session_state.navigate_to_customer = None
@@ -128,7 +144,9 @@ def fetch_account(name, api_key, account_id, time_clause):
     {{
       actor {{
         account(id: {account_id}) {{
-          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name FROM NrAiIncident WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
+          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name 
+                       FROM NrAiIncident 
+                       WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
             results
           }}
         }}
@@ -207,7 +225,7 @@ c2.metric("Active Alerts", len(df[df.Status == "Active"]))
 
 st.divider()
 
-# ---------------- ALERTS BY CUSTOMER (WITH LOGOS) ----------------
+# ---------------- ALERTS BY CUSTOMER (CLICKABLE IMAGE CARDS) ----------------
 if customer == "All Customers":
     st.markdown("### Alerts by Customer")
     counts = df["Customer"].value_counts()
@@ -215,19 +233,24 @@ if customer == "All Customers":
     cols_per_row = 4
     for i in range(0, len(counts), cols_per_row):
         cols = st.columns(cols_per_row)
-        for j, (cust, cnt) in enumerate(list(counts.items())[i:i+cols_per_row]):
+
+        for j, (cust, cnt) in enumerate(list(counts.items())[i:i + cols_per_row]):
             with cols[j]:
+                # invisible button controls navigation
+                if st.button(" ", key=f"nav_{cust}", use_container_width=True):
+                    st.session_state.navigate_to_customer = cust
+                    st.rerun()
+
+                # visual card
                 st.markdown('<div class="customer-card">', unsafe_allow_html=True)
 
+                st.markdown('<div class="customer-logo-wrapper">', unsafe_allow_html=True)
                 img = CUSTOMER_IMAGES.get(cust)
                 if img:
-                    st.image(img, width=80)
+                    st.image(img)
+                st.markdown('</div>', unsafe_allow_html=True)
 
                 st.markdown(f'<div class="customer-count">{cnt}</div>', unsafe_allow_html=True)
                 st.markdown(f'<div class="customer-name">{cust}</div>', unsafe_allow_html=True)
-
-                if st.button("View Alerts", key=f"card_{cust}", use_container_width=True):
-                    st.session_state.navigate_to_customer = cust
-                    st.rerun()
 
                 st.markdown('</div>', unsafe_allow_html=True)
