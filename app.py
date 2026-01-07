@@ -10,27 +10,49 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- CLEAN & BRANDED UI ----------------
+# ---------------- ADVANCED VISUAL HIERARCHY (CSS) ----------------
 st.markdown("""
 <style>
     .stApp { background-color:#0F1115; color:#E6E6E6; }
     .main-header { color: #F37021; font-weight: 800; margin-bottom: 0px; }
     .block-container { padding-top: 2rem; }
 
+    /* Key Metric Card Styling */
     div[data-testid="stMetric"] {
         background-color:#161B22;
         border: 1px solid #30363D;
-        border-radius: 10px;
-        padding: 15px;
+        border-radius: 12px;
+        padding: 20px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    /* Make Primary Metric Number Prominent */
+    div[data-testid="stMetricValue"] > div {
+        font-size: 2.8rem !important;
+        font-weight: 700 !important;
+        color: #FFFFFF !important;
+    }
+
+    /* Reduce Secondary Label Size */
+    div[data-testid="stMetricLabel"] > div > p {
+        font-size: 0.9rem !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #8B949E !important;
+    }
+
+    /* Adjust Delta (Indicator) Size */
+    div[data-testid="stMetricDelta"] > div {
+        font-size: 0.9rem !important;
+        font-weight: 500;
     }
     
     .streamlit-expanderHeader {
         background-color: #161B22 !important;
         border: 1px solid #30363D !important;
         border-radius: 5px;
-        font-size: 1.1rem;
-        /* Custom adjustment to remove bold marks if any */
-        font-weight: 600; 
+        font-size: 1rem;
+        font-weight: 500;
     }
 
     .stButton>button {
@@ -74,8 +96,8 @@ def get_dynamic_avg_value(count, time_label):
     return float(count)
 
 def get_resolution_rate(df):
-    if df.empty: return "0%"
-    return f"{(len(df[df.Status=='Closed'])/len(df))*100:.0f}%"
+    if df.empty: return 0
+    return (len(df[df.Status=='Closed'])/len(df))*100
 
 def calculate_percent_delta(current, previous):
     if previous == 0:
@@ -119,7 +141,7 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v2.0")
+    st.caption("Pulse Monitoring v2.1")
     st.divider()
     
     customer_selection = st.selectbox(
@@ -177,32 +199,32 @@ st.markdown(f"Viewing: {customer_selection} | Range: {time_label}")
 
 df = st.session_state.alerts
 
-# ---------------- DYNAMIC KPI ROW ----------------
-# Cleaned labels: Removed slashes and formatting marks
+# ---------------- PROMINENT KPI ROW ----------------
+# UI Diagram showing Hierarchy: 
 card_titles = {
-    "6 Hours": "Avg. Alerts per Hour",
-    "24 Hours": "Avg. Alerts per Hour",
-    "7 Days": "Avg. Alerts per Day",
-    "30 Days": "Avg. Alerts per Week"
+    "6 Hours": "Avg Alerts per Hour",
+    "24 Hours": "Avg Alerts per Hour",
+    "7 Days": "Avg Alerts per Day",
+    "30 Days": "Avg Alerts per Week"
 }
-card_title = card_titles.get(time_label, "Avg. Alerts")
+card_title = card_titles.get(time_label, "Avg Alerts")
 
 curr_total = len(df)
 curr_avg = get_dynamic_avg_value(curr_total, time_label)
 prev_avg = get_dynamic_avg_value(total_prev_count, time_label)
+res_rate = get_resolution_rate(df)
 
 total_delta_pct = calculate_percent_delta(curr_total, total_prev_count)
 avg_delta_pct = calculate_percent_delta(curr_avg, prev_avg)
 
-if status_choice in ["Active", "Closed"]:
-    c1, c2 = st.columns(2)
-    c1.metric(f"{status_choice} Alerts", curr_total, delta=total_delta_pct, delta_color="inverse")
-    c2.metric(card_title, f"{curr_avg:.1f}", delta=avg_delta_pct, delta_color="inverse")
-else:
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Alerts", curr_total, delta=total_delta_pct, delta_color="inverse")
-    c2.metric(card_title, f"{curr_avg:.1f}", delta=avg_delta_pct, delta_color="inverse")
-    c3.metric("Resolution Rate", get_resolution_rate(df))
+# Display Metrics
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.metric("Total Alerts", curr_total, delta=total_delta_pct, delta_color="inverse")
+with c2:
+    st.metric(card_title, f"{curr_avg:.1f}", delta=avg_delta_pct, delta_color="inverse")
+with c3:
+    st.metric("Resolution Rate", f"{res_rate:.0f}%")
 
 st.divider()
 
@@ -228,7 +250,6 @@ st.subheader(f"Log: {status_choice} Alerts by Condition")
 conditions = df["conditionName"].value_counts().index
 for condition in conditions:
     cond_df = df[df["conditionName"] == condition]
-    # Removed ** from expander title
     with st.expander(f"{condition} - {len(cond_df)} Alerts"):
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
         entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
@@ -241,4 +262,4 @@ for condition in conditions:
             }
         )
 
-st.caption(f"Last sync: {st.session_state.updated}")
+st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
