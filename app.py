@@ -1,4 +1,59 @@
-import streamlit as st
+st.divider()
+    
+    # Show KPIs
+    c1, c2 = st.columns(2)
+    c1.metric("Total Alerts", len(df_view))
+    c2.metric("Active Alerts", len(df_view[df_view["Status"] == "Active"]))
+
+    st.divider()
+
+    # Show metrics and analysis
+    st.markdown("### 📊 Alert Metrics & Analysis")
+
+    metrics = generate_better_insights(df_view, time_label)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Mean Time to Resolve", metrics["mttr"])
+        st.metric("Alert Frequency", metrics["frequency"])
+
+    with col2:
+        st.metric("Resolution Rate", metrics["resolution_rate"])
+        st.metric("Volume Status", metrics["trend"])
+
+    with col3:
+        st.markdown("**Top Affected Entities:**")
+        if metrics["top_entities"]:
+            for entity, count in metrics["top_entities"]:
+                st.markdown(f"• {entity}: {count} alerts")
+        else:
+            st.markdown("• No entity data available")
+
+    st.divider()
+
+    st.markdown("**Top Alert Condition:**")
+    if metrics["top_condition"] != "N/A":
+        st.markdown(f"🔔 **{metrics['top_condition']}**")
+    else:
+        st.markdown("No conditions detected")
+
+    st.markdown("**Recommendations:**")
+    for rec in metrics["recommendations"]:
+        st.markdown(f"• {rec}")
+
+    st.divider()
+
+    # ---- ENTITY BREAKDOWN ----
+    st.markdown("### Alert Details by Condition")
+
+    top_conditions = df_view["conditionName"].value_counts()
+    for cond, cnt in top_conditions.items():
+        with st.expander(f"{cond} ({cnt})"):
+            subset = df_view[df_view["conditionName"] == cond]
+            entity_summary = subset.groupby("Entity").size().reset_index(name="Count")
+            entity_summary = entity_summary.sort_values("Count", ascending=False)
+            st.dataframe(entity_summary, use_container_width=True, hide_index=True)import streamlit as st
 import requests
 import pandas as pd
 import datetime
@@ -348,13 +403,6 @@ if df.empty:
 df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.info(f"📍 Viewing alerts for **{st.session_state.clicked_customer}**")
-    with col2:
-        if st.button("🔄 Reset", use_container_width=True):
-            st.session_state.clicked_customer = None
-            st.rerun()
 
 # ---------------- KPIs ----------------
 c1, c2 = st.columns(2)
@@ -417,34 +465,15 @@ if not st.session_state.clicked_customer and customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
+                # Make the entire card clickable
                 if st.button(
-                    f"",
+                    f"{count}\nAlerts\n\n{cust_name}",
                     key=f"card_{cust_name}",
                     use_container_width=True,
                     help=f"Click to view {cust_name} details"
                 ):
                     st.session_state.clicked_customer = cust_name
                     st.rerun()
-                
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
-                    border-radius: 12px;
-                    padding: 20px;
-                    text-align: center;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                    color: white;
-                    min-height: 200px;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                ">
-                    <div style="font-size: 32px; font-weight: bold; margin-bottom: 10px;">{count}</div>
-                    <div style="font-size: 12px; opacity: 0.9;">Alerts</div>
-                    <div style="font-size: 16px; font-weight: bold; margin-top: 20px;">{cust_name}</div>
-                </div>
-                """, unsafe_allow_html=True)
     
     st.divider()
     
