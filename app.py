@@ -44,10 +44,10 @@ st.markdown("""
         letter-spacing: -1.5px;
     }
 
-    /* Center Header Styling */
+    /* Center Header Styling - Pulse Monitoring now Orange */
     .center-header {
         text-align: center;
-        color: #F37021;
+        color: #F37021; 
         font-weight: 800;
         font-size: 3.5rem;
         margin-top: 0px;
@@ -184,7 +184,6 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    # Logo and Name at the top of Sidebar
     st.markdown("""
         <div class="sidebar-logo-container">
             <span style="font-size: 2.2rem;">🔥</span>
@@ -194,7 +193,7 @@ with st.sidebar:
     st.divider()
     
     customer_selection = st.selectbox(
-        "Customer",
+        "Client Selector",
         ["All Customers"] + list(CLIENTS.keys()),
         key="customer_filter"
     )
@@ -234,9 +233,10 @@ else:
     st.session_state.alerts = pd.DataFrame()
 
 # ---------------- MAIN CONTENT ----------------
-# Centered Title
+# Centered Title (Color set in CSS)
 st.markdown('<h1 class="center-header">Pulse Monitoring</h1>', unsafe_allow_html=True)
-st.markdown(f"<p style='text-align: center; font-size: 1.3rem; color: #8B949E;'>Viewing: <b>{customer_selection}</b> | Range: <b>{time_label}</b></p>", unsafe_allow_html=True)
+
+# Viewing and Range display removed as requested
 
 df = st.session_state.alerts
 
@@ -265,7 +265,8 @@ if df.empty:
 
 # ---------------- CLIENT TILES ----------------
 if customer_selection == "All Customers":
-    st.subheader("Regional Health Status")
+    # Renamed from Regional Health Status to Alerts by customer
+    st.subheader("Alerts by customer")
     counts = df["Customer"].value_counts()
     cols = st.columns(4)
     for i, (cust, cnt) in enumerate(counts.items()):
@@ -282,4 +283,4 @@ for condition in df["conditionName"].value_counts().index:
     with st.expander(f"📌 {condition} - {len(cond_df)} Alerts"):
         st.dataframe(cond_df.groupby("Entity").size().reset_index(name="Alert Count").sort_values("Alert Count", ascending=False), hide_index=True, use_container_width=True)
 
-st.caption(f"Last sync: {st.session_state.updated}")
+st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
