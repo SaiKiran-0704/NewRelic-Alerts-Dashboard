@@ -424,27 +424,41 @@ if customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                # Create a container for the card with logo
-                with st.container():
-                    col_logo, col_info = st.columns([1, 2])
-                    
-                    with col_logo:
-                        logo_path = CUSTOMER_LOGOS.get(cust_name)
-                        if logo_path:
-                            try:
-                                st.image(logo_path, width=80, use_container_width=False)
-                            except:
-                                st.markdown("📊")
-                        else:
-                            st.markdown("📊")
-                    
-                    with col_info:
-                        st.markdown(f"<div style='font-size: 18px; font-weight: bold;'>{cust_name}</div>", unsafe_allow_html=True)
-                        st.markdown(f"<div style='font-size: 32px; font-weight: bold; color: #FF9F1C;'>{count}</div>", unsafe_allow_html=True)
-                        st.markdown(f"<div style='font-size: 12px;'>Alerts</div>", unsafe_allow_html=True)
+                # Get logo path for customer
+                logo_path = CUSTOMER_LOGOS.get(cust_name)
+                
+                # Card styling with logo using Streamlit
+                card_html = f"""
+                <div style="
+                    background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
+                    border-radius: 12px;
+                    padding: 20px;
+                    text-align: center;
+                    cursor: pointer;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    color: white;
+                    min-height: 180px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                ">
+                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">{cust_name}</div>
+                    <div style="font-size: 32px; font-weight: bold;">{count}</div>
+                    <div style="font-size: 12px; margin-top: 8px; opacity: 0.9;">Alerts</div>
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
+                
+                # Display logo using Streamlit (if path exists)
+                if logo_path:
+                    try:
+                        st.image(logo_path, width=100)
+                    except:
+                        st.markdown("📊")
                 
                 # Button to drill down
-                if st.button(f"View {cust_name}", key=f"btn_{cust_name}", use_container_width=True):
+                if st.button(f"View {cust_name}", key=f"btn_{cust_name}"):
                     st.session_state.clicked_customer = cust_name
                     st.rerun()
 
