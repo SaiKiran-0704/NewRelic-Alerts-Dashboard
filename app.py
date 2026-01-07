@@ -101,8 +101,7 @@ def fetch_account(name, api_key, account_id, time_clause):
     except:
         return pd.DataFrame()
 
-# ---------------- SIDEBAR DATA PRE-LOAD ----------------
-# We need to load data early to populate the condition filter
+# ---------------- DATA FETCHING ----------------
 all_rows = []
 time_map = {
     "6 Hours": "SINCE 6 hours ago",
@@ -111,10 +110,10 @@ time_map = {
     "30 Days": "SINCE 30 days ago"
 }
 
-# Sidebar inputs that affect data fetching
+# SIDEBAR (Top Part)
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v1.4")
+    st.caption("Pulse Monitoring v1.5")
     st.divider()
     
     customer_selection = st.selectbox(
@@ -126,13 +125,14 @@ with st.sidebar:
     time_label = st.selectbox("Time Window", list(time_map.keys()))
     time_clause = time_map[time_label]
 
-# Data Fetching Logic
+# Run fetching
 targets = CLIENTS.items() if customer_selection == "All Customers" else [(customer_selection, CLIENTS.get(customer_selection, {}))]
 for name, cfg in targets:
     if cfg:
         df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
         if not df_res.empty: all_rows.append(df_res)
 
+# Process initial data to get condition names
 if all_rows:
     raw = pd.concat(all_rows)
     raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
@@ -144,31 +144,37 @@ if all_rows:
     ).reset_index()
     grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
     
-    # Get all available conditions for the filter
-    available_conditions = sorted(grouped["conditionName"].unique().tolist())
+    # FETCH ALL UNIQUE CONDITIONS & ADD 'ALL' OPTION
+    raw_conditions = sorted(grouped["conditionName"].unique().tolist())
+    condition_options = ["All"] + raw_conditions
 else:
     grouped = pd.DataFrame()
-    available_conditions = []
+    condition_options = ["All"]
 
-# ---------------- SIDEBAR FILTERS (POST-LOAD) ----------------
+# ---------------- SIDEBAR FILTERS ----------------
 with st.sidebar:
     status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
     
-    # NEW: Condition Multi-select Filter
+    # CONDITION FILTER WITH 'ALL' AS DEFAULT
     selected_conditions = st.multiselect(
-        "Filter Conditions",
-        options=available_conditions,
-        default=available_conditions,
-        help="Filter the dashboard by specific alert conditions."
+        "Condition Filter",
+        options=condition_options,
+        default=["All"],
+        help="Select 'All' to see everything, or pick specific conditions."
     )
 
     if st.button("🔄 Force Refresh"):
         st.cache_data.clear()
         st.rerun()
 
-# ---------------- FILTERING LOGIC ----------------
+# ---------------- FILTER LOGIC ----------------
 if not grouped.empty:
-    mask = (grouped["conditionName"].isin(selected_conditions))
+    # If "All" is in selection OR selection is empty, show everything
+    if "All" in selected_conditions or not selected_conditions:
+        mask = pd.Series([True] * len(grouped))
+    else:
+        mask = grouped["conditionName"].isin(selected_conditions)
+    
     if status_choice != "All":
         mask &= (grouped["Status"] == status_choice)
     
@@ -178,13 +184,13 @@ if not grouped.empty:
 else:
     st.session_state.alerts = pd.DataFrame()
 
-# ---------------- MAIN CONTENT ----------------
+# ---------------- MAIN DASHBOARD UI ----------------
 st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
 st.markdown(f"**Viewing:** `{customer_selection}` | **Range:** `{time_label}`")
 
 df = st.session_state.alerts
 
-# ---------------- DYNAMIC KPI ROW ----------------
+# KPI ROW
 if status_choice in ["Active", "Closed"]:
     c1, c2 = st.columns(2)
     c1.metric(f"{status_choice} Alerts", len(df))
@@ -198,10 +204,10 @@ else:
 st.divider()
 
 if df.empty:
-    st.info(f"No alerts found for the selected filters. 🎉")
+    st.info(f"No alerts found matching your criteria. 🎉")
     st.stop()
 
-# ---------------- CLIENT TILES (ONLY ON ALL VIEW) ----------------
+# CLIENT TILES (ALL VIEW ONLY)
 if customer_selection == "All Customers":
     st.subheader("Client Health Overview")
     counts = df["Customer"].value_counts()
@@ -213,11 +219,10 @@ if customer_selection == "All Customers":
                 st.rerun()
     st.divider()
 
-# ---------------- HIERARCHICAL INCIDENT LOG ----------------
+# INCIDENT LOG
 st.subheader(f"📋 {status_choice} Alerts by Condition")
-
-conditions = df["conditionName"].value_counts().index
-for condition in conditions:
+conditions_to_show = df["conditionName"].value_counts().index
+for condition in conditions_to_show:
     cond_df = df[df["conditionName"] == condition]
     with st.expander(f"**{condition}** — {len(cond_df)} Alerts"):
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
@@ -226,10 +231,7 @@ for condition in conditions:
             entity_summary, 
             hide_index=True, 
             use_container_width=True,
-            column_config={
-                "Alert Count": st.column_config.NumberColumn("Alerts", format="%d 🚨")
-            }
+            column_config={"Alert Count": st.column_config.NumberColumn("Alerts", format="%d 🚨")}
         )
 
-# ---------------- FOOTER ----------------
 st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
