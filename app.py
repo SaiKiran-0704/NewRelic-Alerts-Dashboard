@@ -10,33 +10,20 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- CLEAN UI STYLING ----------------
+# ---------------- CLEAN & BRANDED UI ----------------
 st.markdown("""
 <style>
     .stApp { background-color:#0F1115; color:#E6E6E6; }
     .main-header { color: #F37021; font-weight: 800; margin-bottom: 0px; }
     .block-container { padding-top: 2rem; }
-    
-    /* KPI Card Style */
     div[data-testid="stMetric"] {
         background-color:#161B22;
         border: 1px solid #30363D;
         border-radius: 10px;
         padding: 15px;
     }
-    
-    /* Sidebar Style */
-    section[data-testid="stSidebar"] {
-        background-color:#151821;
-        border-right:1px solid #2A2F3A;
-    }
-
-    /* Condition Group Headers */
-    .stExpander {
-        border: 1px solid #30363D !important;
-        background-color: #111418 !important;
-        margin-bottom: 10px;
-    }
+    section[data-testid="stSidebar"] { background-color:#151821; border-right:1px solid #2A2F3A; }
+    .stExpander { border: 1px solid #30363D !important; background-color: #161B22 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -58,9 +45,10 @@ def format_duration(td):
 
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
+    # Added entity.type to the SELECT statement
     query = f"""
     {{ actor {{ account(id: {account_id}) {{
-          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name FROM NrAiIncident WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
+          nrql(query: "SELECT timestamp, conditionName, priority, incidentId, event, entity.name, entity.type FROM NrAiIncident WHERE event IN ('open','close') {time_clause} LIMIT MAX") {{
             results
           }}
         }} }} }}
@@ -71,12 +59,15 @@ def fetch_account(name, api_key, account_id, time_clause):
         df = pd.DataFrame(data)
         if not df.empty:
             df["Customer"] = name
-            df.rename(columns={"entity.name": "Entity"}, inplace=True)
+            # Cleanup naming
+            df.rename(columns={"entity.name": "Entity", "entity.type": "Type"}, inplace=True)
+            # Handle missing types
+            df["Type"] = df["Type"].fillna("Other")
         return df
-    except:
+    except Exception:
         return pd.DataFrame()
 
-# ---------------- SIDEBAR ----------------
+# ---------------- DATA PROCESSING ----------------
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
     customer = st.selectbox("Client Selector", ["All Customers"] + list(CLIENTS.keys()), key="customer_filter")
@@ -84,7 +75,6 @@ with st.sidebar:
     time_label = st.selectbox("Time Window", list(time_map.keys()))
     time_clause = time_map[time_label]
 
-# ---------------- DATA FETCH & PROCESS ----------------
 all_rows = []
 targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
 
@@ -95,7 +85,8 @@ for name, cfg in targets:
 if all_rows:
     raw = pd.concat(all_rows)
     raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
-    grouped = raw.groupby(["incidentId", "Customer", "conditionName", "priority", "Entity"]).agg(
+    # Group including 'Type'
+    grouped = raw.groupby(["incidentId", "Customer", "conditionName", "priority", "Entity", "Type"]).agg(
         start_time=("timestamp", "min"),
         end_time=("timestamp", "max"),
         events=("event", "nunique")
@@ -108,44 +99,31 @@ if all_rows:
 else:
     st.session_state.alerts = pd.DataFrame()
 
-# ---------------- MAIN DASHBOARD ----------------
+# ---------------- MAIN UI ----------------
 st.markdown("<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
 df = st.session_state.alerts
 
 if df is not None and not df.empty:
     # KPI Row
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Volume", len(df))
-    active_df = df[df.Status == "Active"]
-    c2.metric("Active Now", len(active_df), delta=len(active_df), delta_color="inverse")
-    c3.metric("Unique Conditions", df["conditionName"].nunique())
+    c1.metric("Total Alerts", len(df))
+    c2.metric("Active Now", len(df[df.Status == "Active"]))
+    c3.metric("Entity Groups", df["Type"].nunique())
 
     st.divider()
 
-    # ---------------- ENTITY CONDITION GROUPS ----------------
-    st.subheader("📋 Alerts by Condition Group")
+    # ---------------- ENTITY GROUPING VIEW ----------------
+    st.subheader("📁 Alerts by Entity Type")
     
-    # Sort conditions by number of alerts (noisiest first)
-    condition_counts = df["conditionName"].value_counts()
-    
-    for condition, count in condition_counts.items():
-        # Filter data for this specific condition
-        condition_df = df[df["conditionName"] == condition]
-        
-        # Color coding for the header
-        has_active = "Active" in condition_df["Status"].values
-        header_label = f"🔴 {condition} ({count})" if has_active else f"🟢 {condition} ({count})"
-        
-        with st.expander(header_label):
-            # Displaying the specific entities impacted by this condition
-            display_df = condition_df[["Status", "Customer", "Entity", "Duration", "start_time"]]
+    # Create an expander for each entity type (e.g., HOST, APPLICATION, SYNTHETIC)
+    for ent_type, type_df in df.groupby("Type"):
+        with st.expander(f"{ent_type} ({len(type_df)} Alerts)"):
+            # Sub-table for this group
+            display_cols = ["Status", "Customer", "Entity", "conditionName", "Duration"]
             st.dataframe(
-                display_df.sort_values("Status"), 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "start_time": st.column_config.DatetimeColumn("Detected At", format="D MMM, HH:mm"),
-                }
+                type_df[display_cols],
+                use_container_width=True,
+                hide_index=True
             )
 else:
-    st.success("No alerts found in this time range.")
+    st.success("No alerts found for this selection.")
