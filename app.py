@@ -48,8 +48,13 @@ st.markdown("""
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
 
-if "alerts" not in st.session_state: st.session_state.alerts = None
-if "updated" not in st.session_state: st.session_state.updated = None
+# Initialize Session States
+if "selected_customer" not in st.session_state:
+    st.session_state.selected_customer = "All Customers"
+if "alerts" not in st.session_state: 
+    st.session_state.alerts = None
+if "updated" not in st.session_state: 
+    st.session_state.updated = None
 
 # ---------------- HELPERS ----------------
 def get_dynamic_avg_details(count, time_label):
@@ -106,11 +111,18 @@ with st.sidebar:
     st.caption("Pulse Monitoring v1.9")
     st.divider()
     
-    # Use session_state key to allow tile-clicks to update the dropdown
+    customer_options = ["All Customers"] + list(CLIENTS.keys())
+    
+    # Use the session_state index to stay in sync
+    def on_change_customer():
+        st.session_state.selected_customer = st.session_state.sidebar_customer
+        
     customer_selection = st.selectbox(
         "Client Selector", 
-        ["All Customers"] + list(CLIENTS.keys()), 
-        key="customer_selection_key"
+        options=customer_options,
+        index=customer_options.index(st.session_state.selected_customer),
+        key="sidebar_customer",
+        on_change=on_change_customer
     )
     
     status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
@@ -158,7 +170,6 @@ curr_avg, avg_label = get_dynamic_avg_details(curr_total, time_label)
 prev_avg, _ = get_dynamic_avg_details(total_prev_count, time_label)
 avg_delta = calculate_delta(curr_avg, prev_avg)
 
-# Invert delta colors: In alerts, increase is RED (bad), decrease is GREEN (good)
 c1, c2, c3 = st.columns(3)
 c1.metric("Total Alerts", curr_total, delta=total_delta, delta_color="inverse")
 c2.metric(avg_label, f"{curr_avg:.1f}", delta=avg_delta, delta_color="inverse")
@@ -169,15 +180,15 @@ if df.empty:
     st.info("No alerts found.")
     st.stop()
 
-# CLIENT TILES & LOG
+# CLIENT TILES
 if customer_selection == "All Customers":
     counts = df["Customer"].value_counts()
     cols = st.columns(4)
     for i, (cust, cnt) in enumerate(counts.items()):
         with cols[i % 4]:
             if st.button(f"{cust}\n\n{cnt} Alerts", key=f"c_{cust}", use_container_width=True):
-                # Update sidebar dropdown and rerun
-                st.session_state.customer_selection_key = cust
+                # Correct way to update state:
+                st.session_state.selected_customer = cust
                 st.rerun()
 
 st.subheader(f"📋 {status_choice} Alerts by Condition")
