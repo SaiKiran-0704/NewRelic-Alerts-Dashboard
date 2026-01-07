@@ -29,6 +29,8 @@ st.markdown("""
         border: 1px solid #30363D !important;
         border-radius: 5px;
         font-size: 1.1rem;
+        /* Custom adjustment to remove bold marks if any */
+        font-weight: 600; 
     }
 
     .stButton>button {
@@ -83,7 +85,6 @@ def calculate_percent_delta(current, previous):
 
 @st.cache_data(ttl=300)
 def fetch_account_with_history(name, api_key, account_id, time_label):
-    # Mapping for current vs previous comparison
     time_map_history = {
         "6 Hours": ("SINCE 6 hours ago", "SINCE 12 hours ago UNTIL 6 hours ago"),
         "24 Hours": ("SINCE 24 hours ago", "SINCE 48 hours ago UNTIL 24 hours ago"),
@@ -172,17 +173,17 @@ else:
 
 # ---------------- MAIN CONTENT ----------------
 st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
-st.markdown(f"**Viewing:** `{customer_selection}` | **Range:** `{time_label}`")
+st.markdown(f"Viewing: {customer_selection} | Range: {time_label}")
 
 df = st.session_state.alerts
 
 # ---------------- DYNAMIC KPI ROW ----------------
-# Dynamic labels for the cards
+# Cleaned labels: Removed slashes and formatting marks
 card_titles = {
-    "6 Hours": "Avg. Alerts / Hour",
-    "24 Hours": "Avg. Alerts / Hour",
-    "7 Days": "Avg. Alerts / Day",
-    "30 Days": "Avg. Alerts / Week"
+    "6 Hours": "Avg. Alerts per Hour",
+    "24 Hours": "Avg. Alerts per Hour",
+    "7 Days": "Avg. Alerts per Day",
+    "30 Days": "Avg. Alerts per Week"
 }
 card_title = card_titles.get(time_label, "Avg. Alerts")
 
@@ -190,13 +191,11 @@ curr_total = len(df)
 curr_avg = get_dynamic_avg_value(curr_total, time_label)
 prev_avg = get_dynamic_avg_value(total_prev_count, time_label)
 
-# Calculate Percentages for Delta
 total_delta_pct = calculate_percent_delta(curr_total, total_prev_count)
 avg_delta_pct = calculate_percent_delta(curr_avg, prev_avg)
 
 if status_choice in ["Active", "Closed"]:
     c1, c2 = st.columns(2)
-    # delta_color="inverse" makes increase RED and decrease GREEN (ideal for alerts)
     c1.metric(f"{status_choice} Alerts", curr_total, delta=total_delta_pct, delta_color="inverse")
     c2.metric(card_title, f"{curr_avg:.1f}", delta=avg_delta_pct, delta_color="inverse")
 else:
@@ -208,7 +207,7 @@ else:
 st.divider()
 
 if df.empty:
-    st.info(f"No {status_choice.lower()} alerts found. 🎉")
+    st.info(f"No {status_choice.lower()} alerts found.")
     st.stop()
 
 # ---------------- CLIENT TILES ----------------
@@ -224,12 +223,13 @@ if customer_selection == "All Customers":
     st.divider()
 
 # ---------------- INCIDENT LOG ----------------
-st.subheader(f"📋 {status_choice} Alerts by Condition")
+st.subheader(f"Log: {status_choice} Alerts by Condition")
 
 conditions = df["conditionName"].value_counts().index
 for condition in conditions:
     cond_df = df[df["conditionName"] == condition]
-    with st.expander(f"**{condition}** — {len(cond_df)} Alerts"):
+    # Removed ** from expander title
+    with st.expander(f"{condition} - {len(cond_df)} Alerts"):
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
         entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
         st.dataframe(
