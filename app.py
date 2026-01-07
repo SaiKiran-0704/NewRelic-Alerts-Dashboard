@@ -39,6 +39,13 @@ ENDPOINT = "https://api.newrelic.com/graphql"
 if "customer_filter" not in st.session_state: st.session_state.customer_filter = "All Customers"
 
 # ---------------- HELPERS ----------------
+def clean_label(text):
+    """Removes markdown symbols like ** and the forward slash / symbol."""
+    if not text: return ""
+    # Specifically remove asterisks and forward slashes
+    cleaned = text.replace("**", "").replace("/", "")
+    return cleaned.strip()
+
 def calculate_mttr(df):
     if df.empty: return "N/A"
     durations = []
@@ -90,10 +97,8 @@ targets = CLIENTS.items() if customer_selection == "All Customers" else [(custom
 with st.spinner("Analyzing trends..."):
     for name, cfg in targets:
         if not cfg: continue
-        # Fetch Current
         curr_q = f"SELECT timestamp, conditionName, incidentId, event, entity.name FROM NrAiIncident WHERE event IN ('open','close') {clauses['current']} LIMIT MAX"
         current_rows.append(process_alerts(fetch_nrql(cfg["api_key"], cfg["account_id"], curr_q), name))
-        # Fetch Previous for Delta
         prev_q = f"SELECT incidentId FROM NrAiIncident WHERE event = 'open' {clauses['previous']} LIMIT MAX"
         prev_rows.append(pd.DataFrame(fetch_nrql(cfg["api_key"], cfg["account_id"], prev_q)))
 
@@ -102,21 +107,13 @@ curr_df = pd.concat(current_rows) if current_rows else pd.DataFrame()
 prev_total = sum([len(d["incidentId"].unique()) if not d.empty else 0 for d in prev_rows])
 
 if not curr_df.empty:
-    # Grouping to incidents
     grouped = curr_df.groupby(["incidentId", "Customer", "conditionName", "Entity"]).agg(
         start_time=("timestamp", "min"), end_time=("timestamp", "max"), events=("event", "nunique")
     ).reset_index()
     grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
-    
-    # Filter by Status
     display_df = grouped if status_choice == "All" else grouped[grouped["Status"] == status_choice]
-    
     curr_total = len(grouped["incidentId"].unique())
-    # Calculate percentage change
-    if prev_total > 0:
-        delta_val = f"{((curr_total - prev_total) / prev_total) * 100:.1f}%"
-    else:
-        delta_val = "New"
+    delta_val = f"{((curr_total - prev_total) / prev_total) * 100:.1f}%" if prev_total > 0 else "New"
 else:
     display_df = pd.DataFrame()
     curr_total = 0
@@ -125,18 +122,9 @@ else:
 # ---------------- MAIN CONTENT ----------------
 st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>")
 
-# KPI Row with Comparison Delta
 c1, c2 = st.columns(2)
-c1.metric(
-    label="Total Alerts (Current Window)", 
-    value=curr_total, 
-    delta=delta_val, 
-    delta_color="inverse"
-)
-c2.metric(
-    label="Avg. Resolution Time", 
-    value=calculate_mttr(display_df)
-)
+c1.metric(label="Total Alerts (Current)", value=curr_total, delta=delta_val, delta_color="inverse")
+c2.metric(label="Avg. Resolution Time", value=calculate_mttr(display_df))
 
 st.divider()
 
@@ -146,11 +134,14 @@ if display_df.empty:
 
 # ---------------- HIERARCHICAL LOG ----------------
 st.subheader(f"📋 {status_choice} Alerts by Condition")
+
 for condition in display_df["conditionName"].value_counts().index:
     cond_df = display_df[display_df["conditionName"] == condition]
     
-    # Updated: Removed the ** symbols from the label
-    with st.expander(f"{condition} — {len(cond_df)} Alerts"):
+    # Apply cleaner to remove / and **
+    clean_title = clean_label(condition)
+    
+    with st.expander(f"{clean_title} — {len(cond_df)} Alerts"):
         entity_sum = cond_df.groupby("Entity").size().reset_index(name="Alerts")
         st.dataframe(
             entity_sum.sort_values("Alerts", ascending=False), 
