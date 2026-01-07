@@ -79,11 +79,9 @@ CUSTOMER_LOGOS = {
     "cignal": "logos/cignal.png",
     "Tm": "logos/tm.png",
     "gotham sports": "logos/gotham_sports.png",
-    "game": "logos/gotham_sports.png",
     "univision": "logos/univision.png",
     "local now": "logos/local_now.png",
-    "amd": "logos/local_now.png"
-}
+   
 
 # ---------------- HELPERS ----------------
 def format_duration(td):
