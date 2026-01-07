@@ -66,10 +66,22 @@ def format_duration(td):
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
 def calculate_mttr(df):
-    closed = df[df["Status"] == "Closed"]
-    if closed.empty: return "N/A"
-    durations = (closed['end_time'] - closed['start_time']).dt.total_seconds() / 60
-    avg = durations.mean()
+    # For MTTR, we usually look at closed alerts, but this calculates duration for the provided set
+    if df.empty: return "N/A"
+    
+    # Use start and end times to find duration in minutes
+    # For Active alerts, end_time is the same as start_time in the grouping logic, 
+    # so we use 'now' for Active and 'end_time' for Closed.
+    durations = []
+    now = datetime.datetime.utcnow()
+    
+    for _, row in df.iterrows():
+        if row["Status"] == "Active":
+            durations.append((now - row["start_time"]).total_seconds() / 60)
+        else:
+            durations.append((row["end_time"] - row["start_time"]).total_seconds() / 60)
+            
+    avg = sum(durations) / len(durations)
     return f"{int(avg//60)}h {int(avg%60)}m" if avg >= 60 else f"{int(avg)}m"
 
 def get_resolution_rate(df):
@@ -108,7 +120,7 @@ with st.sidebar:
         key="customer_filter"
     )
 
-    # --- NEW STATUS FILTER ---
+    # Status Filter
     status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
 
     time_map = {
@@ -131,7 +143,7 @@ with st.sidebar:
 all_rows = []
 targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS.get(customer, {}))]
 
-with st.spinner("Syncing with New Relic..."):
+with st.spinner("Syncing..."):
     for name, cfg in targets:
         if cfg:
             df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
@@ -148,10 +160,8 @@ if all_rows:
     ).reset_index()
     
     grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
-    now = datetime.datetime.utcnow()
-    grouped["Duration"] = grouped.apply(lambda r: format_duration((now - r.start_time) if r.Status == "Active" else (r.end_time - r.start_time)), axis=1)
     
-    # --- APPLY STATUS FILTER ---
+    # Filter by selected status before calculating session state
     if status_choice != "All":
         display_df = grouped[grouped["Status"] == status_choice].copy()
     else:
@@ -164,18 +174,22 @@ else:
 
 # ---------------- MAIN CONTENT ----------------
 st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
-st.markdown(f"**Viewing:** `{customer}` | **Status:** `{status_choice}` | **Range:** `{time_label}`")
+st.markdown(f"**Viewing:** `{customer}` | **Range:** `{time_label}`")
 
 df = st.session_state.alerts
 if df.empty:
-    st.info(f"No {status_choice.lower()} alerts found for this selection. 🎉")
+    st.info(f"No {status_choice.lower()} alerts found. 🎉")
     st.stop()
 
-# ---------------- KPI ROW ----------------
-c1, c2, c3 = st.columns(3)
-c1.metric(f"{status_choice} Alerts", len(df))
-c2.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
-c3.metric("Resolution Rate", get_resolution_rate(df))
+# ---------------- DYNAMIC KPI ROW ----------------
+# If Active or Closed is selected, show only MTTR. If All, show all 3.
+if status_choice in ["Active", "Closed"]:
+    st.metric("Avg. Duration" if status_choice == "Active" else "Avg. Resolution Time", calculate_mttr(df))
+else:
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Alerts", len(df))
+    c2.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
+    c3.metric("Resolution Rate", get_resolution_rate(df))
 
 st.divider()
 
@@ -192,25 +206,19 @@ if customer == "All Customers":
     st.divider()
 
 # ---------------- HIERARCHICAL INCIDENT LOG ----------------
-st.subheader("📋 Alerts by Condition & Entity")
+st.subheader(f"📋 {status_choice} Alerts by Condition")
 
-# Group alerts by Condition Name (Sorted by volume)
 conditions = df["conditionName"].value_counts().index
-
 for condition in conditions:
     cond_df = df[df["conditionName"] == condition]
-    
     with st.expander(f"**{condition}** — {len(cond_df)} Alerts"):
-        
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
         entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
-        
         st.dataframe(
             entity_summary, 
             hide_index=True, 
             use_container_width=True,
             column_config={
-                "Entity": st.column_config.TextColumn("Impacted Entity"),
                 "Alert Count": st.column_config.NumberColumn("Alerts", format="%d 🚨")
             }
         )
