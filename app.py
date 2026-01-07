@@ -40,11 +40,10 @@ if "customer_filter" not in st.session_state: st.session_state.customer_filter =
 
 # ---------------- HELPERS ----------------
 def clean_label(text):
-    """Removes markdown symbols like ** and the forward slash / symbol."""
+    """Removes markdown symbols and specific tags like /mmt or asterisks."""
     if not text: return ""
-    # Specifically remove asterisks and forward slashes
-    cleaned = text.replace("**", "").replace("/", "")
-    return cleaned.strip()
+    # Remove markdown bolding and the specific /mmt tag
+    return text.replace("**", "").replace("/mmt", "").strip()
 
 def calculate_mttr(df):
     if df.empty: return "N/A"
@@ -138,7 +137,7 @@ st.subheader(f"📋 {status_choice} Alerts by Condition")
 for condition in display_df["conditionName"].value_counts().index:
     cond_df = display_df[display_df["conditionName"] == condition]
     
-    # Apply cleaner to remove / and **
+    # Apply the CLEANER here to remove stars and /mmt
     clean_title = clean_label(condition)
     
     with st.expander(f"{clean_title} — {len(cond_df)} Alerts"):
