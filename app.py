@@ -157,3 +157,4 @@ for condition in display_df["conditionName"].value_counts().index:
             hide_index=True, 
             use_container_width=True
         )
+    
