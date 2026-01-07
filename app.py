@@ -163,7 +163,6 @@ def generate_insights(df, time_label):
         "top_condition": top_condition
     }
 
-# ---------------- FETCH ACCOUNT ----------------
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
     query = f"""
@@ -182,20 +181,21 @@ def fetch_account(name, api_key, account_id, time_clause):
         r = requests.post(ENDPOINT, json={"query": query}, headers={"API-Key": api_key})
         resp = r.json()
 
-        results = (
-            resp.get("data", {})
-                .get("actor", {})
-                .get("account", {})
-                .get("nrql", {})
-                .get("results", [])
-        )
-
-        if results:
-            df = pd.DataFrame(results)
-            df["Customer"] = name
-            df.rename(columns={"entity.name":"Entity"}, inplace=True)
+        # Check if data exists
+        if (
+            "data" in resp and 
+            "actor" in resp["data"] and
+            "account" in resp["data"]["actor"] and
+            "nrql" in resp["data"]["actor"]["account"] and
+            "results" in resp["data"]["actor"]["account"]["nrql"]
+        ):
+            df = pd.DataFrame(resp["data"]["actor"]["account"]["nrql"]["results"])
+            if not df.empty:
+                df["Customer"] = name
+                df.rename(columns={"entity.name":"Entity"}, inplace=True)
             return df
         else:
+            st.warning(f"No data returned for {name}")
             return pd.DataFrame()
     except Exception as e:
         st.error(f"Error fetching data for {name}: {e}")
@@ -223,9 +223,7 @@ if all_rows:
     grouped["Duration"]=grouped.apply(lambda r: format_duration((now-r.start_time) if r.Status=="Active" else (r.end_time-r.start_time)),axis=1)
     st.session_state.alerts = grouped.sort_values("start_time",ascending=False)
     st.session_state.updated=datetime.datetime.now().strftime("%H:%M:%S")
-else:
-    st.session_state.alerts=pd.DataFrame()
-    st.info("No alerts found for the selected customers and time range 🎉")
+else: st.session_state.alerts=pd.DataFrame()
 
 df = st.session_state.alerts
 
@@ -238,6 +236,7 @@ else:
 st.divider()
 
 if df.empty:
+    st.success("No alerts found 🎉")
     st.stop()
 
 # ---------------- DRILLDOWN ----------------
