@@ -17,7 +17,6 @@ st.markdown("""
     .main-header { color: #F37021; font-weight: 800; margin-bottom: 0px; }
     .block-container { padding-top: 2rem; }
 
-    /* KPI Card Refinement */
     div[data-testid="stMetric"] {
         background-color:#161B22;
         border: 1px solid #30363D;
@@ -25,7 +24,6 @@ st.markdown("""
         padding: 15px;
     }
     
-    /* Expander Styling */
     .streamlit-expanderHeader {
         background-color: #161B22 !important;
         border: 1px solid #30363D !important;
@@ -33,7 +31,6 @@ st.markdown("""
         font-size: 1.1rem;
     }
 
-    /* Button Grid for Customers */
     .stButton>button {
         background-color: #1C2128;
         border: 1px solid #30363D;
@@ -102,7 +99,7 @@ def fetch_account(name, api_key, account_id, time_clause):
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v1.1")
+    st.caption("Pulse Monitoring v1.2")
     st.divider()
     
     customer = st.selectbox(
@@ -110,6 +107,9 @@ with st.sidebar:
         ["All Customers"] + list(CLIENTS.keys()),
         key="customer_filter"
     )
+
+    # --- NEW STATUS FILTER ---
+    status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
 
     time_map = {
         "6 Hours": "SINCE 6 hours ago",
@@ -129,12 +129,13 @@ with st.sidebar:
 
 # ---------------- LOAD & PROCESS DATA ----------------
 all_rows = []
-targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS[customer])]
+targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS.get(customer, {}))]
 
 with st.spinner("Syncing with New Relic..."):
     for name, cfg in targets:
-        df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
-        if not df_res.empty: all_rows.append(df_res)
+        if cfg:
+            df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
+            if not df_res.empty: all_rows.append(df_res)
 
 if all_rows:
     raw = pd.concat(all_rows)
@@ -150,23 +151,29 @@ if all_rows:
     now = datetime.datetime.utcnow()
     grouped["Duration"] = grouped.apply(lambda r: format_duration((now - r.start_time) if r.Status == "Active" else (r.end_time - r.start_time)), axis=1)
     
-    st.session_state.alerts = grouped.sort_values("start_time", ascending=False)
+    # --- APPLY STATUS FILTER ---
+    if status_choice != "All":
+        display_df = grouped[grouped["Status"] == status_choice].copy()
+    else:
+        display_df = grouped.copy()
+
+    st.session_state.alerts = display_df.sort_values("start_time", ascending=False)
     st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
 else:
     st.session_state.alerts = pd.DataFrame()
 
 # ---------------- MAIN CONTENT ----------------
 st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
-st.markdown(f"**Viewing:** `{customer}` | **Range:** `{time_label}`")
+st.markdown(f"**Viewing:** `{customer}` | **Status:** `{status_choice}` | **Range:** `{time_label}`")
 
 df = st.session_state.alerts
 if df.empty:
-    st.success("All systems operational. No alerts found. 🎉")
+    st.info(f"No {status_choice.lower()} alerts found for this selection. 🎉")
     st.stop()
 
 # ---------------- KPI ROW ----------------
 c1, c2, c3 = st.columns(3)
-c1.metric("Total Alerts", len(df))
+c1.metric(f"{status_choice} Alerts", len(df))
 c2.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
 c3.metric("Resolution Rate", get_resolution_rate(df))
 
@@ -193,10 +200,8 @@ conditions = df["conditionName"].value_counts().index
 for condition in conditions:
     cond_df = df[df["conditionName"] == condition]
     
-    # Header logic: Removed the word "Total"
     with st.expander(f"**{condition}** — {len(cond_df)} Alerts"):
         
-        # Entity Summary Table
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
         entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
         
