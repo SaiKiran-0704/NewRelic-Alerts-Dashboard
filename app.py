@@ -1,18 +1,8 @@
-import os
-from PIL import Image
-
-# Load logo function
-def load_logo(logo_filename):
-    """Load logo image from logos folder"""
-    logo_path = f"logos/{logo_filename}"
-    try:
-        if os.path.exists(logo_path):
-            return Image.open(logo_path)
-    except:
-        pass
-    return None
-import os
-from PIL import Image
+import streamlit as st
+import requests
+import pandas as pd
+import datetime
+import altair as alt
 
 # ---- MUST BE FIRST ----
 st.set_page_config(
@@ -49,20 +39,6 @@ div[data-testid="stMetric"] {
 # ---------------- CONFIG ----------------
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
-
-# Mapping of customer names
-CUSTOMER_NAMES = {
-    "Aha": "Aha",
-    "canela": "Canela",
-    "pLive": "pLive",
-    "cignal": "Cignal",
-    "Tm": "TM",
-    "gotham sports": "Gotham Sports",
-    "game": "Game",
-    "univision": "Univision",
-    "local now": "Local Now",
-    "amd": "AMD"
-}
 
 # ---------------- SESSION STATE ----------------
 if "alerts" not in st.session_state:
@@ -109,16 +85,6 @@ def format_duration(td):
 
 def style_status(v):
     return "color:#FF5C5C;font-weight:600" if v == "Active" else "color:#6EE7B7;font-weight:600"
-
-def load_logo(logo_filename):
-    """Load logo image from logos folder"""
-    logo_path = f"logos/{logo_filename}"
-    try:
-        if os.path.exists(logo_path):
-            return Image.open(logo_path)
-    except Exception as e:
-        pass
-    return None
 
 def count_alerts_for_period(name, api_key, account_id, time_clause):
     """Count total alerts for a given time period"""
@@ -423,39 +389,34 @@ if customer == "All Customers":
         
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
+                if st.button(
+                    f"",
+                    key=f"card_{cust_name}",
+                    use_container_width=True,
+                    help=f"Click to view {cust_name} details"
+                ):
+                    st.session_state.clicked_customer = cust_name
+                    st.rerun()
+                
                 st.markdown(f"""
                 <div style="
                     background: linear-gradient(135deg, #FF9F1C 0%, #FF8C00 100%);
-                    border-radius: 15px;
-                    padding: 30px 20px;
+                    border-radius: 12px;
+                    padding: 20px;
                     text-align: center;
-                    min-height: 220px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    color: white;
+                    min-height: 200px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
                     align-items: center;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
                 ">
-                    <div style="font-size: 48px; font-weight: bold; color: white; margin-bottom: 20px;">
-                        {count}
-                    </div>
-                    <div style="font-size: 14px; color: white; opacity: 0.9;">
-                        Alerts
-                    </div>
+                    <div style="font-size: 32px; font-weight: bold; margin-bottom: 10px;">{count}</div>
+                    <div style="font-size: 12px; opacity: 0.9;">Alerts</div>
+                    <div style="font-size: 16px; font-weight: bold; margin-top: 20px;">{cust_name}</div>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                logo_filename = CUSTOMER_LOGOS.get(cust_name)
-                if logo_filename:
-                    logo_image = load_logo(logo_filename)
-                    if logo_image:
-                        st.image(logo_image, use_container_width=True)
-                
-                if st.button(f"View {cust_name}", key=f"btn_{cust_name}", use_container_width=True):
-                    st.session_state.clicked_customer = cust_name
-                    st.rerun()
-                
-                st.markdown("---")
 
 st.divider()
 
