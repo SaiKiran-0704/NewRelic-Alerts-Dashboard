@@ -10,11 +10,25 @@ st.set_page_config(
     page_icon="🔥"
 )
 
-# ---------------- ADVANCED VISUAL HIERARCHY (CSS) ----------------
+# ---------------- ADVANCED VISUAL HIERARCHY & BRANDING (CSS) ----------------
 st.markdown("""
 <style>
     .stApp { background-color:#0F1115; color:#E6E6E6; }
     
+    /* Quickplay Orange Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #F37021 !important;
+    }
+    
+    /* Ensure Sidebar text and labels are readable (Dark on Orange) */
+    [data-testid="stSidebar"] .stText, 
+    [data-testid="stSidebar"] label, 
+    [data-testid="stSidebar"] .stCaption,
+    [data-testid="stSidebar"] p {
+        color: #0F1115 !important;
+        font-weight: 600 !important;
+    }
+
     /* Prominent Top Logo/Header Styling */
     .logo-container {
         display: flex;
@@ -73,15 +87,11 @@ st.markdown("""
         font-weight: 500;
     }
 
-    .stButton>button {
-        background-color: #1C2128;
-        border: 1px solid #30363D;
+    /* Sidebar Buttons (Contrast adjustment) */
+    [data-testid="stSidebar"] .stButton>button {
+        background-color: #0F1115;
+        border: 1px solid #0F1115;
         color: white;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        border-color: #F37021;
-        color: #F37021;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -158,8 +168,7 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    # Logo removed from here
-    st.caption("Pulse Monitoring v2.2")
+    st.caption("Pulse Monitoring v2.3")
     st.divider()
     
     customer_selection = st.selectbox(
@@ -212,7 +221,6 @@ else:
     st.session_state.alerts = pd.DataFrame()
 
 # ---------------- MAIN CONTENT ----------------
-# New prominent logo and title at the top
 st.markdown("""
     <div class="logo-container">
         <span class="logo-icon">🔥</span>
