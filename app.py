@@ -194,7 +194,7 @@ with st.sidebar:
     st.divider()
     
     customer_selection = st.selectbox(
-        "Client Selector",
+        "Customer",
         ["All Customers"] + list(CLIENTS.keys()),
         key="customer_filter"
     )
@@ -282,4 +282,4 @@ for condition in df["conditionName"].value_counts().index:
     with st.expander(f"📌 {condition} - {len(cond_df)} Alerts"):
         st.dataframe(cond_df.groupby("Entity").size().reset_index(name="Alert Count").sort_values("Alert Count", ascending=False), hide_index=True, use_container_width=True)
 
-st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
+st.caption(f"Last sync: {st.session_state.updated}")
