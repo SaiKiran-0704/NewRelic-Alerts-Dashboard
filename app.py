@@ -32,12 +32,46 @@ div[data-testid="stMetric"] {
     border:1px solid #2A2F3A;
     border-radius:8px;
 }
+
+.customer-card {
+    background-color: #151821;
+    border: 1px solid #2A2F3A;
+    border-radius: 14px;
+    padding: 18px;
+    text-align: center;
+}
+
+.customer-card:hover {
+    border-color: #FF5C5C;
+}
+
+.customer-count {
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.customer-name {
+    font-size: 14px;
+    opacity: 0.85;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------- CONFIG ----------------
 CLIENTS = st.secrets.get("clients", {})
 ENDPOINT = "https://api.newrelic.com/graphql"
+
+# ---------------- CUSTOMER IMAGES ----------------
+CUSTOMER_IMAGES = {
+    "Aha": "assets/aha.png",
+    "PLIVE": "assets/plive.png",
+    "CIGNAL": "assets/cignal.png",
+    "TM": "assets/tm.png",
+    "GAME": "assets/game.png",
+    "AMD": "assets/amd.png",
+    "Univision": "assets/univision.png",
+    "CANELA": "assets/canela.png",
+}
 
 # ---------------- SESSION STATE ----------------
 if "alerts" not in st.session_state:
@@ -49,7 +83,7 @@ if "customer_filter" not in st.session_state:
 if "navigate_to_customer" not in st.session_state:
     st.session_state.navigate_to_customer = None
 
-# -------- SAFE NAVIGATION (MUST BE BEFORE SIDEBAR) --------
+# -------- SAFE NAVIGATION --------
 if st.session_state.navigate_to_customer:
     st.session_state.customer_filter = st.session_state.navigate_to_customer
     st.session_state.navigate_to_customer = None
@@ -86,66 +120,6 @@ def format_duration(td):
     m, s = divmod(s, 60)
     h, m = divmod(m, 60)
     return f"{h}h {m}m" if h else f"{m}m {s}s"
-
-def calculate_mttr(df):
-    closed = df[df["Status"] == "Closed"]
-    if closed.empty:
-        return "N/A"
-    mins = []
-    for d in closed["Duration"]:
-        total = 0
-        for p in d.split():
-            if "h" in p:
-                total += int(p.replace("h","")) * 60
-            elif "m" in p:
-                total += int(p.replace("m",""))
-        mins.append(total)
-    avg = sum(mins) / len(mins)
-    return f"{int(avg//60)}h {int(avg%60)}m" if avg >= 60 else f"{int(avg)}m"
-
-def get_resolution_rate(df):
-    if df.empty:
-        return "0%"
-    return f"{(len(df[df.Status=='Closed'])/len(df))*100:.0f}%"
-
-def generate_alert_summary(df, customer_name):
-    if df.empty:
-        return "### 🧠 Alert Summary\n\nNo alerts detected in this period."
-
-    total = len(df)
-    active = len(df[df["Status"] == "Active"])
-    resolved = total - active
-
-    top_condition = df["conditionName"].value_counts().idxmax()
-    top_entity = df["Entity"].value_counts().idxmax()
-
-    active_ratio = active / total
-
-    if active_ratio > 0.6:
-        health = "🚨 **Critical**"
-        action = "Immediate investigation required. Too many active alerts."
-    elif active_ratio > 0.3:
-        health = "⚠️ **Needs Attention**"
-        action = "Monitor closely and review alert thresholds."
-    else:
-        health = "✅ **Healthy**"
-        action = "Alerting looks stable."
-
-    scope = "All Customers" if customer_name == "All Customers" else customer_name
-
-    return f"""
-### 🧠 Alert Summary
-
-- **Scope:** **{scope}**
-- **Total Alerts:** {total}
-- **Active Alerts:** {active} | **Resolved:** {resolved}
-- **Alert Health:** {health}
-
-**Most Frequent Condition:** `{top_condition}`  
-**Most Impacted Entity:** `{top_entity}`  
-
-**Recommendation:** {action}
-"""
 
 # ---------------- DATA FETCH ----------------
 @st.cache_data(ttl=300)
@@ -231,40 +205,29 @@ c1, c2 = st.columns(2)
 c1.metric("Total Alerts", len(df))
 c2.metric("Active Alerts", len(df[df.Status == "Active"]))
 
-# ---------------- ALERT SUMMARY ----------------
-st.divider()
-st.markdown(generate_alert_summary(df, customer))
 st.divider()
 
-# ---------------- ALERTS BY CUSTOMER ----------------
+# ---------------- ALERTS BY CUSTOMER (WITH LOGOS) ----------------
 if customer == "All Customers":
     st.markdown("### Alerts by Customer")
     counts = df["Customer"].value_counts()
 
-    cols_per_row = 3
+    cols_per_row = 4
     for i in range(0, len(counts), cols_per_row):
         cols = st.columns(cols_per_row)
         for j, (cust, cnt) in enumerate(list(counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                if st.button(
-                    f"{cnt}\nAlerts\n\n{cust}",
-                    key=f"card_{cust}",
-                    use_container_width=True
-                ):
+                st.markdown('<div class="customer-card">', unsafe_allow_html=True)
+
+                img = CUSTOMER_IMAGES.get(cust)
+                if img:
+                    st.image(img, width=80)
+
+                st.markdown(f'<div class="customer-count">{cnt}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="customer-name">{cust}</div>', unsafe_allow_html=True)
+
+                if st.button("View Alerts", key=f"card_{cust}", use_container_width=True):
                     st.session_state.navigate_to_customer = cust
                     st.rerun()
 
-st.divider()
-
-# ---------------- ENTITY BREAKDOWN ----------------
-st.markdown("### Alert Details by Condition")
-for cond, cnt in df["conditionName"].value_counts().items():
-    with st.expander(f"{cond} ({cnt})"):
-        subset = df[df["conditionName"] == cond]
-        entity_summary = (
-            subset.groupby("Entity")
-            .size()
-            .reset_index(name="Count")
-            .sort_values("Count", ascending=False)
-        )
-        st.dataframe(entity_summary, use_container_width=True, hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
