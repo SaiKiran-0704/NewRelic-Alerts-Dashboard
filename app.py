@@ -66,21 +66,14 @@ def format_duration(td):
     return f"{h}h {m}m" if h else f"{m}m {s}s"
 
 def calculate_mttr(df):
-    # For MTTR, we usually look at closed alerts, but this calculates duration for the provided set
     if df.empty: return "N/A"
-    
-    # Use start and end times to find duration in minutes
-    # For Active alerts, end_time is the same as start_time in the grouping logic, 
-    # so we use 'now' for Active and 'end_time' for Closed.
     durations = []
     now = datetime.datetime.utcnow()
-    
     for _, row in df.iterrows():
         if row["Status"] == "Active":
             durations.append((now - row["start_time"]).total_seconds() / 60)
         else:
             durations.append((row["end_time"] - row["start_time"]).total_seconds() / 60)
-            
     avg = sum(durations) / len(durations)
     return f"{int(avg//60)}h {int(avg%60)}m" if avg >= 60 else f"{int(avg)}m"
 
@@ -111,16 +104,15 @@ def fetch_account(name, api_key, account_id, time_clause):
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v1.2")
+    st.caption("Pulse Monitoring v1.3")
     st.divider()
     
-    customer = st.selectbox(
+    customer_selection = st.selectbox(
         "Client Selector",
         ["All Customers"] + list(CLIENTS.keys()),
         key="customer_filter"
     )
 
-    # Status Filter
     status_choice = st.radio("Alert Status", ["All", "Active", "Closed"], horizontal=True)
 
     time_map = {
@@ -136,56 +128,60 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-    if st.session_state.updated:
-        st.markdown(f"**Last Sync:** `{st.session_state.updated}`")
-
-# ---------------- LOAD & PROCESS DATA ----------------
+# ---------------- DATA FETCHING (ALWAYS FETCH ALL FOR GLOBAL CONTEXT) ----------------
 all_rows = []
-targets = CLIENTS.items() if customer == "All Customers" else [(customer, CLIENTS.get(customer, {}))]
-
-with st.spinner("Syncing..."):
-    for name, cfg in targets:
-        if cfg:
-            df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
-            if not df_res.empty: all_rows.append(df_res)
+with st.spinner("Syncing Global Pulse..."):
+    for name, cfg in CLIENTS.items():
+        df_res = fetch_account(name, cfg["api_key"], cfg["account_id"], time_clause)
+        if not df_res.empty: all_rows.append(df_res)
 
 if all_rows:
     raw = pd.concat(all_rows)
     raw["timestamp"] = pd.to_datetime(raw["timestamp"], unit="ms")
     
-    grouped = raw.groupby(["incidentId", "Customer", "conditionName", "priority", "Entity"]).agg(
+    global_df = raw.groupby(["incidentId", "Customer", "conditionName", "priority", "Entity"]).agg(
         start_time=("timestamp", "min"),
         end_time=("timestamp", "max"),
         events=("event", "nunique")
     ).reset_index()
     
-    grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
-    
-    # Filter by selected status before calculating session state
-    if status_choice != "All":
-        display_df = grouped[grouped["Status"] == status_choice].copy()
-    else:
-        display_df = grouped.copy()
-
-    st.session_state.alerts = display_df.sort_values("start_time", ascending=False)
+    global_df["Status"] = global_df["events"].apply(lambda x: "Active" if x == 1 else "Closed")
     st.session_state.updated = datetime.datetime.now().strftime("%H:%M:%S")
+    
+    # Calculate global count of unique customers with Active alerts
+    active_customers_count = global_df[global_df["Status"] == "Active"]["Customer"].nunique()
+
+    # Filter for the UI View
+    if customer_selection == "All Customers":
+        view_df = global_df.copy()
+    else:
+        view_df = global_df[global_df["Customer"] == customer_selection].copy()
+
+    if status_choice != "All":
+        view_df = view_df[view_df["Status"] == status_choice]
+
+    st.session_state.alerts = view_df.sort_values("start_time", ascending=False)
 else:
     st.session_state.alerts = pd.DataFrame()
+    active_customers_count = 0
 
 # ---------------- MAIN CONTENT ----------------
 st.markdown(f"<h1 class='main-header'>🔥 Quickplay Pulse</h1>", unsafe_allow_html=True)
-st.markdown(f"**Viewing:** `{customer}` | **Range:** `{time_label}`")
+st.markdown(f"**Viewing:** `{customer_selection}` | **Range:** `{time_label}`")
 
 df = st.session_state.alerts
-if df.empty:
-    st.info(f"No {status_choice.lower()} alerts found. 🎉")
-    st.stop()
 
 # ---------------- DYNAMIC KPI ROW ----------------
-# If Active or Closed is selected, show only MTTR. If All, show all 3.
-if status_choice in ["Active", "Closed"]:
+if customer_selection != "All Customers" and status_choice == "Active":
+    # Show ONLY MTTR and Total Customers with Active alerts
+    c1, c2 = st.columns(2)
+    c1.metric("Avg. Duration", calculate_mttr(df))
+    c2.metric("Total Impacted Customers", active_customers_count)
+elif status_choice in ["Active", "Closed"]:
+    # Show ONLY MTTR for generic Active/Closed views
     st.metric("Avg. Duration" if status_choice == "Active" else "Avg. Resolution Time", calculate_mttr(df))
 else:
+    # Standard 3-column KPI for "All" view
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Alerts", len(df))
     c2.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
@@ -193,8 +189,12 @@ else:
 
 st.divider()
 
-# ---------------- CLIENT TILES ----------------
-if customer == "All Customers":
+if df.empty:
+    st.info(f"No {status_choice.lower()} alerts found. 🎉")
+    st.stop()
+
+# ---------------- CLIENT TILES (ONLY ON ALL VIEW) ----------------
+if customer_selection == "All Customers":
     st.subheader("Client Health Overview")
     counts = df["Customer"].value_counts()
     cols = st.columns(4)
@@ -214,14 +214,7 @@ for condition in conditions:
     with st.expander(f"**{condition}** — {len(cond_df)} Alerts"):
         entity_summary = cond_df.groupby("Entity").size().reset_index(name="Alert Count")
         entity_summary = entity_summary.sort_values("Alert Count", ascending=False)
-        st.dataframe(
-            entity_summary, 
-            hide_index=True, 
-            use_container_width=True,
-            column_config={
-                "Alert Count": st.column_config.NumberColumn("Alerts", format="%d 🚨")
-            }
-        )
+        st.dataframe(entity_summary, hide_index=True, use_container_width=True)
 
 # ---------------- FOOTER ----------------
-st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
+st.caption(f"Last sync: {st.session_state.updated} | Global Impact: {active_customers_count} Clients Active")
