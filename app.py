@@ -10,7 +10,21 @@ CUSTOMER_LOGOS = {
     "univision": "unow.jpeg",
     "local now": "localnow.png",
     "amd": "localnow.png"
-}import os
+}# Mapping of customer names to logo filenames
+CUSTOMER_LOGOS = {
+    "Aha": "Aha.png",
+    "canela": "canela.png",
+    "pLive": "plive.png",
+    "cignal": "cignal.jpeg",
+    "Tm": "tm.jpeg",
+    "gotham sports": "gotham_sports.jpeg",
+    "game": "gotham_sports.jpeg",
+    "univision": "unow.jpeg",
+    "local now": "localnow.png",
+    "amd": "localnow.png"
+}
+
+import os
 from PIL import Image
 
 # ---------------- PAGE CONFIG ----------------
