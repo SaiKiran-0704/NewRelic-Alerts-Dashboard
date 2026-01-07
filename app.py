@@ -108,6 +108,45 @@ def get_resolution_rate(df):
         return "0%"
     return f"{(len(df[df.Status=='Closed'])/len(df))*100:.0f}%"
 
+def generate_alert_summary(df, customer_name):
+    if df.empty:
+        return "### 🧠 Alert Summary\n\nNo alerts detected in this period."
+
+    total = len(df)
+    active = len(df[df["Status"] == "Active"])
+    resolved = total - active
+
+    top_condition = df["conditionName"].value_counts().idxmax()
+    top_entity = df["Entity"].value_counts().idxmax()
+
+    active_ratio = active / total
+
+    if active_ratio > 0.6:
+        health = "🚨 **Critical**"
+        action = "Immediate investigation required. Too many active alerts."
+    elif active_ratio > 0.3:
+        health = "⚠️ **Needs Attention**"
+        action = "Monitor closely and review alert thresholds."
+    else:
+        health = "✅ **Healthy**"
+        action = "Alerting looks stable."
+
+    scope = "All Customers" if customer_name == "All Customers" else customer_name
+
+    return f"""
+### 🧠 Alert Summary
+
+- **Scope:** **{scope}**
+- **Total Alerts:** {total}
+- **Active Alerts:** {active} | **Resolved:** {resolved}
+- **Alert Health:** {health}
+
+**Most Frequent Condition:** `{top_condition}`  
+**Most Impacted Entity:** `{top_entity}`  
+
+**Recommendation:** {action}
+"""
+
 # ---------------- DATA FETCH ----------------
 @st.cache_data(ttl=300)
 def fetch_account(name, api_key, account_id, time_clause):
@@ -192,6 +231,9 @@ c1, c2 = st.columns(2)
 c1.metric("Total Alerts", len(df))
 c2.metric("Active Alerts", len(df[df.Status == "Active"]))
 
+# ---------------- ALERT SUMMARY ----------------
+st.divider()
+st.markdown(generate_alert_summary(df, customer))
 st.divider()
 
 # ---------------- ALERTS BY CUSTOMER ----------------
@@ -211,19 +253,6 @@ if customer == "All Customers":
                 ):
                     st.session_state.navigate_to_customer = cust
                     st.rerun()
-
-st.divider()
-
-# ---------------- METRICS ----------------
-st.markdown("### 📊 Alert Metrics")
-c1, c2, c3 = st.columns(3)
-
-with c1:
-    st.metric("MTTR", calculate_mttr(df))
-with c2:
-    st.metric("Resolution Rate", get_resolution_rate(df))
-with c3:
-    st.metric("Unique Entities", df["Entity"].nunique())
 
 st.divider()
 
