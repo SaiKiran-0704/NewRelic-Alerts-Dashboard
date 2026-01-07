@@ -7,23 +7,31 @@ import datetime
 st.set_page_config(
     page_title="Quickplay Pulse",
     layout="wide",
-    page_icon="🔥"
+    page_icon="🔥",
+    initial_sidebar_state="expanded" # Force it open on load
 )
 
-# ---------------- ADVANCED VISUAL BRANDING & SIDEBAR (CSS) ----------------
+# ---------------- ADVANCED VISUAL BRANDING & PERMANENT SIDEBAR (CSS) ----------------
 st.markdown("""
 <style>
     /* Main App Background */
     .stApp { background-color:#0A0C10; color:#E6E6E6; }
+    
+    /* REMOVE COLLAPSE ACTION & MAKE SIDEBAR PERMANENT */
+    /* This hides the "<<" toggle button shown in your image */
+    button[kind="headerNoPadding"] {
+        display: none !important;
+    }
     
     /* Increase Sidebar Width and Style */
     section[data-testid="stSidebar"] {
         width: 400px !important;
         background-color: #F37021 !important;
         border-right: 1px solid rgba(0,0,0,0.1);
+        position: fixed; /* Keep it locked */
     }
 
-    /* Adjust Main Content to accommodate wider sidebar */
+    /* Adjust Main Content to accommodate the wide, permanent sidebar */
     section.main {
         margin-left: 50px;
     }
@@ -34,18 +42,18 @@ st.markdown("""
     [data-testid="stSidebar"] .stCaption,
     [data-testid="stSidebar"] p {
         color: #0F1115 !important;
-        font-size: 1.1rem !important;
+        font-size: 1.2rem !important;
         font-weight: 700 !important;
-        margin-bottom: 8px !important;
+        margin-bottom: 12px !important;
     }
 
     /* Glassmorphism for Sidebar Widgets */
     [data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"],
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] {
         background-color: rgba(15, 17, 21, 0.15) !important;
-        border-radius: 10px !important;
+        border-radius: 12px !important;
         border: 1px solid rgba(15, 17, 21, 0.2) !important;
-        padding: 5px;
+        padding: 8px;
     }
 
     /* Top Logo/Header Styling */
@@ -77,21 +85,21 @@ st.markdown("""
 
     /* Prominent Metric Numbers */
     div[data-testid="stMetricValue"] > div {
-        font-size: 3rem !important;
+        font-size: 3.2rem !important;
         font-weight: 800 !important;
         color: #FFFFFF !important;
     }
 
-    /* Adjusted Sidebar Buttons */
+    /* Sidebar Buttons */
     [data-testid="stSidebar"] .stButton>button {
         background-color: #0F1115 !important;
         border: none !important;
         color: white !important;
-        font-size: 1rem !important;
+        font-size: 1.1rem !important;
         font-weight: 700 !important;
-        border-radius: 12px !important;
-        padding: 12px 20px !important;
-        margin-top: 20px !important;
+        border-radius: 15px !important;
+        padding: 15px 20px !important;
+        margin-top: 30px !important;
         width: 100%;
         transition: 0.3s;
     }
@@ -174,8 +182,8 @@ def fetch_account_with_history(name, api_key, account_id, time_label):
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v2.4")
+    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)
+    st.caption("Pulse Monitoring v2.5")
     st.divider()
     
     customer_selection = st.selectbox(
@@ -235,7 +243,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-st.markdown(f"<p style='font-size: 1.2rem; color: #8B949E;'>Viewing: <b>{customer_selection}</b> | Range: <b>{time_label}</b></p>", unsafe_allow_html=True)
+st.markdown(f"<p style='font-size: 1.3rem; color: #8B949E;'>Viewing: <b>{customer_selection}</b> | Range: <b>{time_label}</b></p>", unsafe_allow_html=True)
 
 df = st.session_state.alerts
 
