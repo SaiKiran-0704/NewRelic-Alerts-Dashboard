@@ -58,24 +58,26 @@ if st.session_state.navigate_to_customer:
     st.session_state.navigate_to_customer = None
 
 # ---------------- HELPERS ----------------
-def format_duration(td):
-    s = int(td.total_seconds())
-    if s < 60: return f"{s}s"
-    m, s = divmod(s, 60)
-    h, m = divmod(m, 60)
-    return f"{h}h {m}m" if h else f"{m}m {s}s"
-
-def calculate_mttr(df):
-    if df.empty: return "N/A"
-    durations = []
-    now = datetime.datetime.utcnow()
-    for _, row in df.iterrows():
-        if row["Status"] == "Active":
-            durations.append((now - row["start_time"]).total_seconds() / 60)
-        else:
-            durations.append((row["end_time"] - row["start_time"]).total_seconds() / 60)
-    avg = sum(durations) / len(durations)
-    return f"{int(avg//60)}h {int(avg%60)}m" if avg >= 60 else f"{int(avg)}m"
+def get_avg_alerts(df, time_label):
+    if df.empty: return "0", "N/A"
+    total_alerts = len(df)
+    
+    # Map time window to numeric values and labels
+    if "Hours" in time_label:
+        units = int(time_label.split()[0])
+        label = "Hour"
+    elif "Days" in time_label:
+        units = int(time_label.split()[0])
+        label = "Day"
+    elif "30 Days" in time_label: # Handling the month view
+        units = 4
+        label = "Week"
+    else:
+        units = 1
+        label = "Period"
+        
+    avg = total_alerts / units
+    return f"{avg:.1f}", f"per {label}"
 
 def get_resolution_rate(df):
     if df.empty: return "0%"
@@ -104,7 +106,7 @@ def fetch_account(name, api_key, account_id, time_clause):
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("<h1 style='color:#F37021; font-size: 28px;'>🔥 quickplay</h1>", unsafe_allow_html=True)
-    st.caption("Pulse Monitoring v1.3")
+    st.caption("Pulse Monitoring v1.7")
     st.divider()
     
     customer_selection = st.selectbox(
@@ -150,7 +152,6 @@ if all_rows:
     
     grouped["Status"] = grouped["events"].apply(lambda x: "Active" if x == 1 else "Closed")
     
-    # Filter by selected status
     if status_choice != "All":
         display_df = grouped[grouped["Status"] == status_choice].copy()
     else:
@@ -168,16 +169,16 @@ st.markdown(f"**Viewing:** `{customer_selection}` | **Range:** `{time_label}`")
 df = st.session_state.alerts
 
 # ---------------- DYNAMIC KPI ROW ----------------
-# If Active or Closed is selected, show only MTTR and the Count for that selection
+avg_val, avg_label = get_avg_alerts(df, time_label)
+
 if status_choice in ["Active", "Closed"]:
     c1, c2 = st.columns(2)
     c1.metric(f"{status_choice} Alerts", len(df))
-    c2.metric("Avg. Duration" if status_choice == "Active" else "Avg. Resolution Time", calculate_mttr(df))
+    c2.metric(f"Avg. {status_choice} Alerts", avg_val, avg_label)
 else:
-    # Standard 3-column KPI for "All" view
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Alerts", len(df))
-    c2.metric("Avg. Resolution (MTTR)", calculate_mttr(df))
+    c2.metric("Avg. Alert Frequency", avg_val, avg_label)
     c3.metric("Resolution Rate", get_resolution_rate(df))
 
 st.divider()
@@ -186,7 +187,7 @@ if df.empty:
     st.info(f"No {status_choice.lower()} alerts found. 🎉")
     st.stop()
 
-# ---------------- CLIENT TILES (ONLY ON ALL VIEW) ----------------
+# ---------------- CLIENT TILES ----------------
 if customer_selection == "All Customers":
     st.subheader("Client Health Overview")
     counts = df["Customer"].value_counts()
@@ -198,7 +199,7 @@ if customer_selection == "All Customers":
                 st.rerun()
     st.divider()
 
-# ---------------- HIERARCHICAL INCIDENT LOG ----------------
+# ---------------- INCIDENT LOG ----------------
 st.subheader(f"📋 {status_choice} Alerts by Condition")
 
 conditions = df["conditionName"].value_counts().index
@@ -216,5 +217,4 @@ for condition in conditions:
             }
         )
 
-# ---------------- FOOTER ----------------
 st.caption(f"Last sync: {st.session_state.updated} | Quickplay Internal Pulse")
