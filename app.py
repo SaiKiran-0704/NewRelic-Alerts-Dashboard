@@ -316,39 +316,6 @@ else:
 st.markdown("## 🔥 Quickplay Alerts")
 st.divider()
 
-# ---- FILTERS IN MAIN AREA ----
-col1, col2 = st.columns(2)
-
-with col1:
-    # Set the default index based on clicked customer
-    customer_options = ["All Customers"] + list(CLIENTS.keys())
-    default_index = 0
-    if st.session_state.clicked_customer:
-        try:
-            default_index = customer_options.index(st.session_state.clicked_customer)
-        except ValueError:
-            default_index = 0
-    
-    customer = st.selectbox(
-        "Select Customer",
-        customer_options,
-        index=default_index,
-        key="customer_filter_main"
-    )
-
-with col2:
-    time_map = {
-        "Last 6 Hours": "SINCE 6 hours ago",
-        "Last 24 Hours": "SINCE 24 hours ago",
-        "Last 7 Days": "SINCE 7 days ago",
-        "Last 1 Month": "SINCE 30 days ago",
-        "Last 3 Months": "SINCE 90 days ago"
-    }
-    time_label = st.selectbox("Select Time Range", list(time_map.keys()))
-    time_clause = time_map[time_label]
-
-st.divider()
-
 df = st.session_state.alerts
 if df.empty:
     st.success("No alerts found 🎉")
@@ -359,7 +326,6 @@ df_view = df
 if st.session_state.clicked_customer:
     df_view = df[df["Customer"] == st.session_state.clicked_customer]
     
-    # Show reset button when viewing a specific customer
     col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
     with col_reset2:
         if st.button("← Back to All Customers", use_container_width=True, type="primary"):
@@ -415,19 +381,15 @@ st.divider()
 # ---- SHOW CARDS AND ANALYTICS WHEN "ALL CUSTOMERS" ----
 if not st.session_state.clicked_customer and customer == "All Customers":
     
-    # Alerts by Customer Cards
     st.markdown("### Alerts by Customer")
     
     customer_counts = df["Customer"].value_counts().sort_values(ascending=False)
-    
     cols_per_row = 3
     
     for i in range(0, len(customer_counts), cols_per_row):
         cols = st.columns(cols_per_row)
-        
         for j, (cust_name, count) in enumerate(list(customer_counts.items())[i:i+cols_per_row]):
             with cols[j]:
-                # Make the entire card clickable
                 if st.button(
                     f"{count}\nAlerts\n\n{cust_name}",
                     key=f"card_{cust_name}",
@@ -439,7 +401,6 @@ if not st.session_state.clicked_customer and customer == "All Customers":
     
     st.divider()
     
-    # Show overall analytics for all customers
     st.markdown("### 📊 Alert Metrics & Analysis (All Customers)")
     
     metrics = generate_better_insights(df_view, time_label)
